@@ -128,13 +128,13 @@ async function sendEmail(
   },
   payload: NotificationPayload
 ): Promise<void> {
-  // Use a basic SMTP approach via fetch to a local relay or external API
-  // For simplicity, we construct a raw email and send via SMTP using Node net
-  // However, since we don't want to add nodemailer as a dependency,
-  // we'll use a minimal SMTP client approach
   const net = await import("net");
   const tls = await import("tls");
 
+  // Strip protocol prefix and trailing slashes from hostname
+  const smtpHost = config.smtpHost
+    .replace(/^https?:\/\//, "")
+    .replace(/\/+$/, "");
   const port = config.smtpPort;
   const useStartTLS = port === 587;
   const useImplicitTLS = port === 465;
@@ -193,7 +193,7 @@ async function sendEmail(
 
       // After STARTTLS 220 response, upgrade connection
       if (useStartTLS && step === 2 && code === 220) {
-        socket = tls.connect({ socket: socket as import("net").Socket, servername: config.smtpHost }, () => {
+        socket = tls.connect({ socket: socket as import("net").Socket, servername: smtpHost }, () => {
           setupSocket(socket);
           // Re-send EHLO after TLS upgrade
           socket.write(`EHLO namedrop\r\n`);
@@ -228,11 +228,11 @@ async function sendEmail(
     }
 
     if (useImplicitTLS) {
-      socket = tls.connect(port, config.smtpHost, { servername: config.smtpHost }, () => {
+      socket = tls.connect(port, smtpHost, { servername: smtpHost }, () => {
         setupSocket(socket);
       });
     } else {
-      socket = net.createConnection(port, config.smtpHost, () => {
+      socket = net.createConnection(port, smtpHost, () => {
         setupSocket(socket);
       });
     }
