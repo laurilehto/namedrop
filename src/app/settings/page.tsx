@@ -23,6 +23,8 @@ import {
   Pencil,
   Trash2,
   TestTube,
+  Wallet,
+  RefreshCw,
 } from "lucide-react";
 
 interface NotificationChannel {
@@ -33,6 +35,33 @@ interface NotificationChannel {
   enabled: boolean;
   notifyOn: string;
   createdAt: string;
+}
+
+interface RegistrarConfigItem {
+  id: string;
+  adapterName: string;
+  displayName: string;
+  apiKey: string;
+  apiSecret: string | null;
+  sandboxMode: boolean;
+  extraConfig: string;
+  balance: number | null;
+  balanceUpdated: string | null;
+  enabled: boolean;
+  createdAt: string;
+}
+
+interface AdapterType {
+  name: string;
+  displayName: string;
+  configSchema: Array<{
+    key: string;
+    label: string;
+    type: string;
+    required: boolean;
+    description: string;
+    default?: string | number | boolean;
+  }>;
 }
 
 const CHANNEL_TYPES = [
@@ -49,6 +78,7 @@ const STATUS_OPTIONS = [
   { value: "redemption", label: "Redemption" },
   { value: "pending_delete", label: "Pending Delete" },
   { value: "registered", label: "Registered" },
+  { value: "registration_attempt", label: "Registration Attempt" },
   { value: "error", label: "Error" },
 ];
 
@@ -62,18 +92,14 @@ interface ChannelFormData {
   name: string;
   enabled: boolean;
   notifyOn: string[];
-  // Webhook
   url: string;
-  // Telegram
   botToken: string;
   chatId: string;
-  // Email
   smtpHost: string;
   smtpPort: string;
   smtpUser: string;
   smtpPass: string;
   to: string;
-  // ntfy
   serverUrl: string;
   topic: string;
 }
@@ -93,6 +119,24 @@ const emptyForm: ChannelFormData = {
   to: "",
   serverUrl: "https://ntfy.sh",
   topic: "",
+};
+
+interface RegistrarFormData {
+  adapterName: string;
+  displayName: string;
+  apiKey: string;
+  apiSecret: string;
+  sandboxMode: boolean;
+  extraConfig: Record<string, string>;
+}
+
+const emptyRegistrarForm: RegistrarFormData = {
+  adapterName: "",
+  displayName: "",
+  apiKey: "",
+  apiSecret: "",
+  sandboxMode: true,
+  extraConfig: {},
 };
 
 function formToConfig(form: ChannelFormData): Record<string, unknown> {
@@ -176,15 +220,28 @@ export default function SettingsPage() {
   const [testing, setTesting] = useState<string | null>(null);
   const [channelSaving, setChannelSaving] = useState(false);
 
+  // Registrar state
+  const [registrars, setRegistrars] = useState<RegistrarConfigItem[]>([]);
+  const [adapterTypes, setAdapterTypes] = useState<AdapterType[]>([]);
+  const [regDialogOpen, setRegDialogOpen] = useState(false);
+  const [editingRegId, setEditingRegId] = useState<string | null>(null);
+  const [regForm, setRegForm] = useState<RegistrarFormData>({ ...emptyRegistrarForm });
+  const [regSaving, setRegSaving] = useState(false);
+  const [testingReg, setTestingReg] = useState<string | null>(null);
+  const [checkingBalance, setCheckingBalance] = useState<string | null>(null);
+
   useEffect(() => {
     Promise.all([
       fetch("/api/settings").then((r) => r.json()),
       fetch("/api/scheduler").then((r) => r.json()),
       fetch("/api/notifications").then((r) => r.json()),
-    ]).then(([s, sch, ch]) => {
+      fetch("/api/registrars").then((r) => r.json()),
+    ]).then(([s, sch, ch, reg]) => {
       setSettings(s);
       setScheduler(sch);
       setChannels(ch);
+      setRegistrars(reg.configs || []);
+      setAdapterTypes(reg.adapterTypes || []);
       setLoading(false);
     });
   }, []);
@@ -221,6 +278,7 @@ export default function SettingsPage() {
     );
   };
 
+  // --- Notification Handlers ---
   const fetchChannels = async () => {
     const res = await fetch("/api/notifications");
     setChannels(await res.json());
@@ -319,6 +377,137 @@ export default function SettingsPage() {
     }));
   };
 
+  // --- Registrar Handlers ---
+  const fetchRegistrars = async () => {
+    const res = await fetch("/api/registrars");
+    const data = await res.json();
+    setRegistrars(data.configs || []);
+    setAdapterTypes(data.adapterTypes || []);
+  };
+
+  const openAddRegDialog = () => {
+    setEditingRegId(null);
+    const defaultAdapter = adapterTypes[0]?.name || "";
+    setRegForm({
+      ...emptyRegistrarForm,
+      adapterName: defaultAdapter,
+      displayName: adapterTypes[0]?.displayName || "",
+    });
+    setRegDialogOpen(true);
+  };
+
+  const openEditRegDialog = (reg: RegistrarConfigItem) => {
+    let extra: Record<string, string> = {};
+    try {
+      extra = JSON.parse(reg.extraConfig || "{}");
+    } catch {
+      // ignore
+    }
+    setEditingRegId(reg.id);
+    setRegForm({
+      adapterName: reg.adapterName,
+      displayName: reg.displayName,
+      apiKey: "",
+      apiSecret: "",
+      sandboxMode: reg.sandboxMode,
+      extraConfig: extra,
+    });
+    setRegDialogOpen(true);
+  };
+
+  const handleRegSave = async () => {
+    setRegSaving(true);
+    try {
+      const payload: Record<string, unknown> = {
+        adapterName: regForm.adapterName,
+        displayName: regForm.displayName,
+        sandboxMode: regForm.sandboxMode,
+        extraConfig: regForm.extraConfig,
+      };
+
+      if (editingRegId) {
+        if (regForm.apiKey) payload.apiKey = regForm.apiKey;
+        if (regForm.apiSecret) payload.apiSecret = regForm.apiSecret;
+        await fetch(`/api/registrars/${editingRegId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        toast.success("Registrar updated");
+      } else {
+        payload.apiKey = regForm.apiKey;
+        if (regForm.apiSecret) payload.apiSecret = regForm.apiSecret;
+        await fetch("/api/registrars", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        toast.success("Registrar added");
+      }
+      setRegDialogOpen(false);
+      await fetchRegistrars();
+    } catch {
+      toast.error("Failed to save registrar");
+    } finally {
+      setRegSaving(false);
+    }
+  };
+
+  const handleRegDelete = async (id: string) => {
+    if (!confirm("Delete this registrar configuration?")) return;
+    await fetch(`/api/registrars/${id}`, { method: "DELETE" });
+    toast.success("Registrar deleted");
+    await fetchRegistrars();
+  };
+
+  const handleRegToggle = async (reg: RegistrarConfigItem) => {
+    await fetch(`/api/registrars/${reg.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled: !reg.enabled }),
+    });
+    await fetchRegistrars();
+  };
+
+  const handleTestReg = async (id: string) => {
+    setTestingReg(id);
+    try {
+      const res = await fetch(`/api/registrars/${id}/test`, { method: "POST" });
+      const data = await res.json();
+      if (data.success) {
+        toast.success("Connection successful!");
+      } else {
+        toast.error(`Test failed: ${data.error}`);
+      }
+    } catch {
+      toast.error("Test failed");
+    } finally {
+      setTestingReg(null);
+    }
+  };
+
+  const handleCheckBalance = async (id: string) => {
+    setCheckingBalance(id);
+    try {
+      const res = await fetch(`/api/registrars/${id}/balance`);
+      const data = await res.json();
+      if (data.error) {
+        toast.error(`Balance check failed: ${data.error}`);
+      } else {
+        toast.success(`Balance: $${data.balance.toFixed(2)} ${data.currency}`);
+        await fetchRegistrars();
+      }
+    } catch {
+      toast.error("Balance check failed");
+    } finally {
+      setCheckingBalance(null);
+    }
+  };
+
+  const selectedAdapterType = adapterTypes.find(
+    (a) => a.name === regForm.adapterName
+  );
+
   if (loading) {
     return <p className="text-muted-foreground">Loading...</p>;
   }
@@ -377,6 +566,54 @@ export default function SettingsPage() {
               }
             />
           </div>
+
+          <Separator />
+
+          <div className="flex items-center justify-between">
+            <div>
+              <label className="text-sm font-medium">Auto-Registration</label>
+              <p className="text-xs text-muted-foreground">
+                Automatically register domains when they become available
+              </p>
+            </div>
+            <button
+              onClick={() =>
+                setSettings((s) => ({
+                  ...s,
+                  auto_register_enabled:
+                    s.auto_register_enabled === "true" ? "false" : "true",
+                }))
+              }
+              className={`relative w-11 h-6 rounded-full transition-colors ${
+                settings.auto_register_enabled === "true"
+                  ? "bg-primary"
+                  : "bg-muted"
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-background transition-transform ${
+                  settings.auto_register_enabled === "true"
+                    ? "translate-x-5"
+                    : ""
+                }`}
+              />
+            </button>
+          </div>
+          <div>
+            <label className="text-sm text-muted-foreground">
+              Low Balance Threshold ($)
+            </label>
+            <Input
+              type="number"
+              value={settings.low_balance_threshold || "10"}
+              onChange={(e) =>
+                setSettings((s) => ({
+                  ...s,
+                  low_balance_threshold: e.target.value,
+                }))
+              }
+            />
+          </div>
           <Button onClick={handleSave} disabled={saving}>
             {saving ? "Saving..." : "Save Settings"}
           </Button>
@@ -419,6 +656,119 @@ export default function SettingsPage() {
           <Button variant="outline" onClick={handleManualRun}>
             Run Now
           </Button>
+        </CardContent>
+      </Card>
+
+      <Separator />
+
+      {/* Registrar Accounts */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-sm font-medium flex items-center gap-2">
+            <Wallet size={16} />
+            Registrar Accounts
+          </CardTitle>
+          <Button size="sm" onClick={openAddRegDialog}>
+            <Plus size={14} className="mr-1" />
+            Add Registrar
+          </Button>
+        </CardHeader>
+        <CardContent>
+          {registrars.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No registrar accounts configured. Add one to enable auto-registration.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {registrars.map((reg) => (
+                <div
+                  key={reg.id}
+                  className="flex items-center justify-between p-3 rounded-lg border border-border"
+                >
+                  <div className="flex items-center gap-3">
+                    <Wallet size={18} className="text-muted-foreground" />
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium">
+                          {reg.displayName}
+                        </span>
+                        <Badge variant={reg.enabled ? "default" : "secondary"}>
+                          {reg.enabled ? "On" : "Off"}
+                        </Badge>
+                        {reg.sandboxMode && (
+                          <Badge variant="outline" className="text-yellow-400 border-yellow-400/50">
+                            Sandbox
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-xs text-muted-foreground">
+                          {reg.adapterName}
+                        </span>
+                        {reg.balance !== null && (
+                          <span className="text-xs font-mono">
+                            ${reg.balance.toFixed(2)}
+                          </span>
+                        )}
+                        {reg.balanceUpdated && (
+                          <span className="text-[10px] text-muted-foreground">
+                            ({new Date(reg.balanceUpdated).toLocaleDateString()})
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleRegToggle(reg)}
+                      title={reg.enabled ? "Disable" : "Enable"}
+                    >
+                      {reg.enabled ? "Disable" : "Enable"}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleTestReg(reg.id)}
+                      disabled={testingReg === reg.id}
+                      title="Test connection"
+                    >
+                      <TestTube size={14} />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleCheckBalance(reg.id)}
+                      disabled={checkingBalance === reg.id}
+                      title="Check balance"
+                    >
+                      <RefreshCw
+                        size={14}
+                        className={checkingBalance === reg.id ? "animate-spin" : ""}
+                      />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => openEditRegDialog(reg)}
+                      title="Edit"
+                    >
+                      <Pencil size={14} />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleRegDelete(reg.id)}
+                      title="Delete"
+                    >
+                      <Trash2 size={14} />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -566,7 +916,6 @@ export default function SettingsPage() {
               />
             </div>
 
-            {/* Dynamic config fields based on type */}
             {form.type === "webhook" && (
               <div>
                 <label className="text-sm text-muted-foreground">
@@ -743,6 +1092,155 @@ export default function SettingsPage() {
                 : editingId
                   ? "Update"
                   : "Add Channel"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Registrar Add/Edit Dialog */}
+      <Dialog open={regDialogOpen} onOpenChange={setRegDialogOpen}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {editingRegId ? "Edit Registrar" : "Add Registrar Account"}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm text-muted-foreground">
+                Adapter Type
+              </label>
+              <div className="grid grid-cols-2 gap-2 mt-1">
+                {adapterTypes.map((at) => (
+                  <button
+                    key={at.name}
+                    onClick={() =>
+                      setRegForm((f) => ({
+                        ...f,
+                        adapterName: at.name,
+                        displayName: editingRegId ? f.displayName : at.displayName,
+                      }))
+                    }
+                    disabled={!!editingRegId}
+                    className={`flex flex-col items-center gap-1 p-3 rounded-md border text-xs ${
+                      regForm.adapterName === at.name
+                        ? "border-primary bg-accent"
+                        : "border-border hover:bg-accent/50"
+                    } ${editingRegId ? "opacity-60 cursor-not-allowed" : ""}`}
+                  >
+                    <Wallet size={18} />
+                    {at.displayName}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="text-sm text-muted-foreground">
+                Display Name
+              </label>
+              <Input
+                value={regForm.displayName}
+                onChange={(e) =>
+                  setRegForm((f) => ({ ...f, displayName: e.target.value }))
+                }
+                placeholder="e.g., My Dynadot Account"
+              />
+            </div>
+
+            <div>
+              <label className="text-sm text-muted-foreground">API Key</label>
+              <Input
+                type="password"
+                value={regForm.apiKey}
+                onChange={(e) =>
+                  setRegForm((f) => ({ ...f, apiKey: e.target.value }))
+                }
+                placeholder={editingRegId ? "Leave blank to keep current" : "Enter API key"}
+              />
+            </div>
+
+            <div>
+              <label className="text-sm text-muted-foreground">
+                API Secret (optional)
+              </label>
+              <Input
+                type="password"
+                value={regForm.apiSecret}
+                onChange={(e) =>
+                  setRegForm((f) => ({ ...f, apiSecret: e.target.value }))
+                }
+                placeholder={editingRegId ? "Leave blank to keep current" : "Enter API secret"}
+              />
+            </div>
+
+            {/* Dynamic extra fields from adapter configSchema */}
+            {selectedAdapterType?.configSchema.map((field) => (
+              <div key={field.key}>
+                <label className="text-sm text-muted-foreground">
+                  {field.label}
+                  {field.required && <span className="text-red-400 ml-1">*</span>}
+                </label>
+                <Input
+                  type={field.type === "password" ? "password" : "text"}
+                  value={regForm.extraConfig[field.key] || ""}
+                  onChange={(e) =>
+                    setRegForm((f) => ({
+                      ...f,
+                      extraConfig: { ...f.extraConfig, [field.key]: e.target.value },
+                    }))
+                  }
+                  placeholder={field.description}
+                />
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  {field.description}
+                </p>
+              </div>
+            ))}
+
+            <div className="flex items-center justify-between">
+              <div>
+                <label className="text-sm font-medium">Sandbox Mode</label>
+                <p className="text-xs text-muted-foreground">
+                  Use test/sandbox API endpoints
+                </p>
+              </div>
+              <button
+                onClick={() =>
+                  setRegForm((f) => ({ ...f, sandboxMode: !f.sandboxMode }))
+                }
+                className={`relative w-11 h-6 rounded-full transition-colors ${
+                  regForm.sandboxMode ? "bg-yellow-500" : "bg-primary"
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-background transition-transform ${
+                    regForm.sandboxMode ? "translate-x-5" : ""
+                  }`}
+                />
+              </button>
+            </div>
+            {!regForm.sandboxMode && (
+              <p className="text-xs text-red-400 bg-red-500/10 p-2 rounded">
+                Production mode - real domain registrations will be charged to your account!
+              </p>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setRegDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleRegSave} disabled={regSaving}>
+              {regSaving
+                ? "Saving..."
+                : editingRegId
+                  ? "Update"
+                  : "Add Registrar"}
             </Button>
           </DialogFooter>
         </DialogContent>

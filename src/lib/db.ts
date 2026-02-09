@@ -95,6 +95,7 @@ function createDb() {
       auto_register_enabled: "false",
       rdap_timeout_ms: "10000",
       max_concurrent_checks: "5",
+      low_balance_threshold: "10",
     };
 
     const insertSetting = sqlite.prepare(

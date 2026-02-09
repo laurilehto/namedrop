@@ -11,7 +11,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Trash2, RefreshCw, ExternalLink } from "lucide-react";
+import { Trash2, RefreshCw, ExternalLink, Zap } from "lucide-react";
 import type { Domain } from "@/lib/schema";
 
 interface DomainTableProps {
@@ -31,13 +31,14 @@ export function DomainTable({ domains, onCheck, onDelete, checking }: DomainTabl
           <TableHead className="hidden md:table-cell">Expiry</TableHead>
           <TableHead className="hidden md:table-cell">Last Checked</TableHead>
           <TableHead className="hidden lg:table-cell">Priority</TableHead>
+          <TableHead className="hidden lg:table-cell">Auto-Reg</TableHead>
           <TableHead className="text-right">Actions</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {domains.length === 0 ? (
           <TableRow>
-            <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+            <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
               No domains found.{" "}
               <Link href="/domains/add" className="underline">
                 Add your first domain
@@ -74,6 +75,16 @@ export function DomainTable({ domains, onCheck, onDelete, checking }: DomainTabl
                   <span className="text-yellow-400">High</span>
                 ) : (
                   <span className="text-muted-foreground">Normal</span>
+                )}
+              </TableCell>
+              <TableCell className="hidden lg:table-cell text-sm">
+                {domain.autoRegister ? (
+                  <span className="flex items-center gap-1 text-green-400" title={domain.registrarAdapter || "No adapter"}>
+                    <Zap size={12} />
+                    {domain.registrarAdapter || "On"}
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground">-</span>
                 )}
               </TableCell>
               <TableCell className="text-right">

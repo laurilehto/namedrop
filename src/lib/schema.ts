@@ -76,4 +76,5 @@ export const settings = sqliteTable("settings", {
 export type Domain = typeof domains.$inferSelect;
 export type NewDomain = typeof domains.$inferInsert;
 export type DomainHistoryEntry = typeof domainHistory.$inferSelect;
+export type RegistrarConfig = typeof registrarConfigs.$inferSelect;
 export type Setting = typeof settings.$inferSelect;

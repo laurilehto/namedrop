@@ -1,12 +1,22 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Globe, TrendingUp, Clock, AlertTriangle } from "lucide-react";
+import { Globe, TrendingUp, Clock, AlertTriangle, Wallet } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatsWidget } from "@/components/StatsWidget";
 import { StatusBadge } from "@/components/StatusBadge";
 import { TimelineEntry } from "@/components/TimelineEntry";
 import Link from "next/link";
+
+interface RegistrarBalance {
+  id: string;
+  adapterName: string;
+  displayName: string;
+  balance: number | null;
+  balanceUpdated: string | null;
+  enabled: boolean;
+  sandboxMode: boolean;
+}
 
 interface Stats {
   total: number;
@@ -25,6 +35,7 @@ interface Stats {
     expiryDate: string;
     currentStatus: string;
   }>;
+  registrarBalances: RegistrarBalance[];
 }
 
 export default function DashboardPage() {
@@ -131,6 +142,43 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {stats.registrarBalances && stats.registrarBalances.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Wallet className="h-4 w-4" />
+              Registrar Balances
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {stats.registrarBalances.map((r) => (
+                <div key={r.id} className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium">{r.displayName}</span>
+                    {r.sandboxMode && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400">
+                        Sandbox
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-right">
+                    <span className="font-mono text-sm">
+                      {r.balance !== null ? `$${r.balance.toFixed(2)}` : "N/A"}
+                    </span>
+                    {r.balanceUpdated && (
+                      <p className="text-[10px] text-muted-foreground">
+                        {new Date(r.balanceUpdated).toLocaleString()}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

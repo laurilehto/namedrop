@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { domains, domainHistory } from "@/lib/schema";
+import { domains, domainHistory, registrarConfigs } from "@/lib/schema";
 import { eq, desc, sql, and, gte } from "drizzle-orm";
 
 export async function GET() {
@@ -44,10 +44,25 @@ export async function GET() {
     .sort((a, b) => (a.expiryDate! > b.expiryDate! ? 1 : -1))
     .slice(0, 10);
 
+  // Registrar balances
+  const registrars = await db
+    .select({
+      id: registrarConfigs.id,
+      adapterName: registrarConfigs.adapterName,
+      displayName: registrarConfigs.displayName,
+      balance: registrarConfigs.balance,
+      balanceUpdated: registrarConfigs.balanceUpdated,
+      enabled: registrarConfigs.enabled,
+      sandboxMode: registrarConfigs.sandboxMode,
+    })
+    .from(registrarConfigs)
+    .where(eq(registrarConfigs.enabled, true));
+
   return NextResponse.json({
     total,
     statusCounts,
     recentChanges,
     upcomingExpirations,
+    registrarBalances: registrars,
   });
 }

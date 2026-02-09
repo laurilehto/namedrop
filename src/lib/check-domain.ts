@@ -71,6 +71,16 @@ export async function performCheck(domain: Domain) {
       } catch {
         // Never crash the check for notification failures
       }
+
+      // Auto-registration hook
+      if (result.status === "available" && updatedDomain.autoRegister) {
+        try {
+          const { attemptAutoRegistration } = await import("./registration");
+          await attemptAutoRegistration(updatedDomain);
+        } catch {
+          // Never crash the check for registration failures
+        }
+      }
     }
   }
 

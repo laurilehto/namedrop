@@ -7,13 +7,19 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { StatusBadge } from "@/components/StatusBadge";
 import { TimelineEntry } from "@/components/TimelineEntry";
-import { ArrowLeft, RefreshCw, Trash2 } from "lucide-react";
+import { ArrowLeft, RefreshCw, Trash2, Zap } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 import type { Domain, DomainHistoryEntry } from "@/lib/schema";
 
 interface DomainDetail extends Domain {
   history: DomainHistoryEntry[];
+}
+
+interface RegistrarOption {
+  adapterName: string;
+  displayName: string;
+  enabled: boolean;
 }
 
 export default function DomainDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -23,15 +29,26 @@ export default function DomainDetailPage({ params }: { params: Promise<{ id: str
   const [loading, setLoading] = useState(true);
   const [checking, setChecking] = useState(false);
   const [notes, setNotes] = useState("");
+  const [registrars, setRegistrars] = useState<RegistrarOption[]>([]);
+  const [registering, setRegistering] = useState(false);
 
   useEffect(() => {
-    fetch(`/api/domains/${id}`)
-      .then((r) => r.json())
-      .then((data) => {
-        setDomain(data);
-        setNotes(data.notes || "");
-      })
-      .finally(() => setLoading(false));
+    Promise.all([
+      fetch(`/api/domains/${id}`).then((r) => r.json()),
+      fetch("/api/registrars").then((r) => r.json()),
+    ]).then(([data, regData]) => {
+      setDomain(data);
+      setNotes(data.notes || "");
+      const configs = (regData.configs || [])
+        .filter((c: { enabled: boolean }) => c.enabled)
+        .map((c: { adapterName: string; displayName: string; enabled: boolean }) => ({
+          adapterName: c.adapterName,
+          displayName: c.displayName,
+          enabled: c.enabled,
+        }));
+      setRegistrars(configs);
+      setLoading(false);
+    });
   }, [id]);
 
   const handleCheck = async () => {
@@ -63,6 +80,51 @@ export default function DomainDetailPage({ params }: { params: Promise<{ id: str
     await fetch(`/api/domains/${id}`, { method: "DELETE" });
     toast.success("Domain deleted");
     router.push("/domains");
+  };
+
+  const handleToggleAutoRegister = async () => {
+    if (!domain) return;
+    const newValue = !domain.autoRegister;
+    const res = await fetch(`/api/domains/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ autoRegister: newValue }),
+    });
+    const updated = await res.json();
+    setDomain((d) => d ? { ...d, ...updated } : d);
+    toast.success(newValue ? "Auto-register enabled" : "Auto-register disabled");
+  };
+
+  const handleAdapterChange = async (adapter: string) => {
+    const res = await fetch(`/api/domains/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ registrarAdapter: adapter || null }),
+    });
+    const updated = await res.json();
+    setDomain((d) => d ? { ...d, ...updated } : d);
+    toast.success(adapter ? `Adapter set to ${adapter}` : "Adapter cleared");
+  };
+
+  const handleRegisterNow = async () => {
+    if (!confirm("Register this domain now? This will charge your registrar account.")) return;
+    setRegistering(true);
+    try {
+      const res = await fetch(`/api/domains/${id}/register`, { method: "POST" });
+      const data = await res.json();
+      if (data.success) {
+        toast.success("Domain registered successfully!");
+        // Refresh domain data
+        const domainRes = await fetch(`/api/domains/${id}`);
+        setDomain(await domainRes.json());
+      } else {
+        toast.error(data.error || "Registration failed");
+      }
+    } catch {
+      toast.error("Registration failed");
+    } finally {
+      setRegistering(false);
+    }
   };
 
   if (loading) {
@@ -129,6 +191,67 @@ export default function DomainDetailPage({ params }: { params: Promise<{ id: str
           </CardContent>
         </Card>
       </div>
+
+      {/* Auto-Registration Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-medium flex items-center gap-2">
+            <Zap size={16} />
+            Auto-Registration
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">Auto-Register</p>
+              <p className="text-xs text-muted-foreground">
+                Automatically register when domain becomes available
+              </p>
+            </div>
+            <button
+              onClick={handleToggleAutoRegister}
+              className={`relative w-11 h-6 rounded-full transition-colors ${
+                domain.autoRegister ? "bg-primary" : "bg-muted"
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-background transition-transform ${
+                  domain.autoRegister ? "translate-x-5" : ""
+                }`}
+              />
+            </button>
+          </div>
+
+          {domain.autoRegister && (
+            <div>
+              <label className="text-sm text-muted-foreground">Registrar</label>
+              <select
+                value={domain.registrarAdapter || ""}
+                onChange={(e) => handleAdapterChange(e.target.value)}
+                className="w-full mt-1 rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="">Select a registrar...</option>
+                {registrars.map((r) => (
+                  <option key={r.adapterName} value={r.adapterName}>
+                    {r.displayName}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {domain.currentStatus === "available" && domain.registrarAdapter && (
+            <Button
+              onClick={handleRegisterNow}
+              disabled={registering}
+              className="w-full"
+            >
+              <Zap size={14} className="mr-2" />
+              {registering ? "Registering..." : "Register Now"}
+            </Button>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

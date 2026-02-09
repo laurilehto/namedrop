@@ -28,7 +28,10 @@ const STATUS_EMOJI: Record<string, string> = {
   error: "\u26AA",
 };
 
-function buildMessage(domain: string, newStatus: string): string {
+function buildMessage(domain: string, newStatus: string, event?: string): string {
+  if (event === "registration_attempt") {
+    return `\u2705 ${domain} registration attempted`;
+  }
   const emoji = STATUS_EMOJI[newStatus] || "";
   const labels: Record<string, string> = {
     available: "is now available!",
@@ -67,7 +70,7 @@ function buildPayload(
     auto_register: domain.autoRegister ?? false,
     priority: domain.priority ?? 0,
     tags,
-    message: buildMessage(domain.domain, newStatus),
+    message: buildMessage(domain.domain, newStatus, event),
   };
 }
 
@@ -302,7 +305,7 @@ export async function sendNotification(
     for (const channel of channels) {
       try {
         const notifyOn: string[] = JSON.parse(channel.notifyOn || "[]");
-        if (!notifyOn.includes(newStatus)) continue;
+        if (!notifyOn.includes(newStatus) && !notifyOn.includes(event)) continue;
 
         const config: ChannelConfig = JSON.parse(channel.config || "{}");
         const sender = senders[channel.type];

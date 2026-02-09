@@ -34,6 +34,7 @@ export async function PATCH(
   if (body.notes !== undefined) updates.notes = body.notes;
   if (body.tags !== undefined) updates.tags = JSON.stringify(body.tags);
   if (body.autoRegister !== undefined) updates.autoRegister = body.autoRegister;
+  if (body.registrarAdapter !== undefined) updates.registrarAdapter = body.registrarAdapter;
   if (body.priority !== undefined) updates.priority = body.priority;
   updates.updatedAt = new Date().toISOString();
 

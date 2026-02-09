@@ -116,6 +116,16 @@ export async function runSchedulerCheck() {
             } catch {
               // Never crash the scheduler for notification failures
             }
+
+            // Auto-registration hook
+            if (checkResult.status === "available" && updatedDomain.autoRegister) {
+              try {
+                const { attemptAutoRegistration } = await import("./registration");
+                await attemptAutoRegistration(updatedDomain);
+              } catch {
+                // Never crash the scheduler for registration failures
+              }
+            }
           }
         }
       } catch {
