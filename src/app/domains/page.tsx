@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DomainTable } from "@/components/DomainTable";
-import { Plus, Search } from "lucide-react";
+import { Plus, Search, Download } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 import type { Domain } from "@/lib/schema";
@@ -60,12 +60,45 @@ export default function DomainsPage() {
           <h1 className="text-2xl font-bold tracking-tight">Domains</h1>
           <p className="text-muted-foreground">Manage your domain watchlist</p>
         </div>
-        <Link href="/domains/add">
-          <Button>
-            <Plus size={16} className="mr-2" />
-            Add Domain
-          </Button>
-        </Link>
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <Button
+              variant="outline"
+              onClick={() => {
+                const menu = document.getElementById("export-menu");
+                menu?.classList.toggle("hidden");
+              }}
+            >
+              <Download size={16} className="mr-2" />
+              Export
+            </Button>
+            <div
+              id="export-menu"
+              className="hidden absolute right-0 mt-1 w-36 rounded-md border border-border bg-popover p-1 shadow-md z-10"
+            >
+              <a
+                href="/api/domains/export?format=json"
+                download
+                className="block px-3 py-1.5 text-sm rounded hover:bg-accent"
+              >
+                Export JSON
+              </a>
+              <a
+                href="/api/domains/export?format=csv"
+                download
+                className="block px-3 py-1.5 text-sm rounded hover:bg-accent"
+              >
+                Export CSV
+              </a>
+            </div>
+          </div>
+          <Link href="/domains/add">
+            <Button>
+              <Plus size={16} className="mr-2" />
+              Add Domain
+            </Button>
+          </Link>
+        </div>
       </div>
 
       <div className="flex items-center gap-3">

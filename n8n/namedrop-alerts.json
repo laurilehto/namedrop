@@ -1,0 +1,212 @@
+{
+  "name": "NameDrop Domain Alerts",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "namedrop-alerts",
+        "responseMode": "onReceived",
+        "responseData": "allEntries"
+      },
+      "id": "webhook-trigger",
+      "name": "NameDrop Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "rules": [
+            {
+              "conditions": {
+                "options": {
+                  "leftValue": "",
+                  "caseSensitive": true,
+                  "typeValidation": "strict"
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.new_status }}",
+                    "rightValue": "available",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": "Available"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "leftValue": "",
+                  "caseSensitive": true,
+                  "typeValidation": "strict"
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.new_status }}",
+                    "rightValue": "pending_delete",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": "Pending Delete"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "leftValue": "",
+                  "caseSensitive": true,
+                  "typeValidation": "strict"
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.new_status }}",
+                    "rightValue": "expiring_soon",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": "Expiring Soon"
+            }
+          ],
+          "fallbackOutput": {
+            "renameOutput": "Other"
+          }
+        },
+        "options": {}
+      },
+      "id": "switch-status",
+      "name": "Route by Status",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "operation": "sendMessage",
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "={{ $json.message }}\n\nDomain: {{ $json.domain }}\nStatus: {{ $json.previous_status }} → {{ $json.new_status }}\n{{ $json.expiry_date ? 'Expiry: ' + $json.expiry_date : '' }}\n{{ $json.registrar ? 'Registrar: ' + $json.registrar : '' }}\n{{ $json.tags.length > 0 ? 'Tags: ' + $json.tags.join(', ') : '' }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "telegram-available",
+      "name": "Telegram (Available)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [700, 150],
+      "credentials": {
+        "telegramApi": {
+          "id": "CONFIGURE_ME",
+          "name": "Telegram Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "sendMessage",
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "={{ $json.message }}\n\nDomain: {{ $json.domain }}\nExpiry: {{ $json.expiry_date }}\nRegistrar: {{ $json.registrar }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "telegram-pending",
+      "name": "Telegram (Pending Delete)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [700, 300],
+      "credentials": {
+        "telegramApi": {
+          "id": "CONFIGURE_ME",
+          "name": "Telegram Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "namedrop@example.com",
+        "toEmail": "={{ $env.ALERT_EMAIL }}",
+        "subject": "NameDrop: {{ $json.message }}",
+        "emailType": "text",
+        "message": "Domain Status Change\n\n{{ $json.message }}\n\nDomain: {{ $json.domain }}\nPrevious Status: {{ $json.previous_status }}\nNew Status: {{ $json.new_status }}\nExpiry Date: {{ $json.expiry_date }}\nRegistrar: {{ $json.registrar }}\nTags: {{ $json.tags.join(', ') }}\nChecked At: {{ $json.checked_at }}\n\n---\nSent by NameDrop"
+      },
+      "id": "email-expiring",
+      "name": "Email (Expiring Soon)",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [700, 450],
+      "credentials": {
+        "smtp": {
+          "id": "CONFIGURE_ME",
+          "name": "SMTP Account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "NameDrop Webhook": {
+      "main": [
+        [
+          {
+            "node": "Route by Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Status": {
+      "main": [
+        [
+          {
+            "node": "Telegram (Available)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Telegram (Pending Delete)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Email (Expiring Soon)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "instanceId": "namedrop-template"
+  },
+  "tags": [
+    {
+      "name": "NameDrop",
+      "createdAt": "2026-02-09T00:00:00.000Z",
+      "updatedAt": "2026-02-09T00:00:00.000Z"
+    }
+  ]
+}

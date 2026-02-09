@@ -2,6 +2,7 @@ import { db } from "./db";
 import { domains, domainHistory, settings } from "./schema";
 import { eq } from "drizzle-orm";
 import { checkDomain, getCheckIntervalMinutes } from "./rdap";
+import { sendNotification } from "./notifications";
 import type { Domain } from "./schema";
 
 export async function performCheck(domain: Domain) {
@@ -39,7 +40,7 @@ export async function performCheck(domain: Domain) {
     .where(eq(domains.id, domain.id));
 
   if (result.status !== domain.currentStatus) {
-    await db.insert(domainHistory).values({
+    const historyResult = await db.insert(domainHistory).values({
       domainId: domain.id,
       fromStatus: domain.currentStatus,
       toStatus: result.status,
@@ -49,7 +50,28 @@ export async function performCheck(domain: Domain) {
         registrar: result.registrar,
         error: result.error,
       }),
-    });
+    }).returning();
+
+    // Fetch updated domain for notification payload
+    const updatedDomain = await db
+      .select()
+      .from(domains)
+      .where(eq(domains.id, domain.id))
+      .get();
+
+    if (updatedDomain) {
+      try {
+        await sendNotification(
+          updatedDomain,
+          "status_change",
+          result.status,
+          domain.currentStatus,
+          historyResult[0]?.id
+        );
+      } catch {
+        // Never crash the check for notification failures
+      }
+    }
   }
 
   return { ...result, nextCheck };

@@ -5,7 +5,157 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { toast } from "sonner";
+import {
+  Webhook,
+  Send,
+  Mail,
+  Bell,
+  Plus,
+  Pencil,
+  Trash2,
+  TestTube,
+} from "lucide-react";
+
+interface NotificationChannel {
+  id: string;
+  type: string;
+  name: string;
+  config: string;
+  enabled: boolean;
+  notifyOn: string;
+  createdAt: string;
+}
+
+const CHANNEL_TYPES = [
+  { value: "webhook", label: "Webhook", icon: Webhook },
+  { value: "telegram", label: "Telegram", icon: Send },
+  { value: "email", label: "Email", icon: Mail },
+  { value: "ntfy", label: "ntfy", icon: Bell },
+];
+
+const STATUS_OPTIONS = [
+  { value: "available", label: "Available" },
+  { value: "expiring_soon", label: "Expiring Soon" },
+  { value: "grace_period", label: "Grace Period" },
+  { value: "redemption", label: "Redemption" },
+  { value: "pending_delete", label: "Pending Delete" },
+  { value: "registered", label: "Registered" },
+  { value: "error", label: "Error" },
+];
+
+function getChannelIcon(type: string) {
+  const ct = CHANNEL_TYPES.find((t) => t.value === type);
+  return ct ? ct.icon : Webhook;
+}
+
+interface ChannelFormData {
+  type: string;
+  name: string;
+  enabled: boolean;
+  notifyOn: string[];
+  // Webhook
+  url: string;
+  // Telegram
+  botToken: string;
+  chatId: string;
+  // Email
+  smtpHost: string;
+  smtpPort: string;
+  smtpUser: string;
+  smtpPass: string;
+  to: string;
+  // ntfy
+  serverUrl: string;
+  topic: string;
+}
+
+const emptyForm: ChannelFormData = {
+  type: "webhook",
+  name: "",
+  enabled: true,
+  notifyOn: ["available", "expiring_soon"],
+  url: "",
+  botToken: "",
+  chatId: "",
+  smtpHost: "",
+  smtpPort: "587",
+  smtpUser: "",
+  smtpPass: "",
+  to: "",
+  serverUrl: "https://ntfy.sh",
+  topic: "",
+};
+
+function formToConfig(form: ChannelFormData): Record<string, unknown> {
+  switch (form.type) {
+    case "webhook":
+      return { url: form.url };
+    case "telegram":
+      return { botToken: form.botToken, chatId: form.chatId };
+    case "email":
+      return {
+        smtpHost: form.smtpHost,
+        smtpPort: parseInt(form.smtpPort) || 587,
+        smtpUser: form.smtpUser,
+        smtpPass: form.smtpPass,
+        to: form.to,
+      };
+    case "ntfy":
+      return { serverUrl: form.serverUrl, topic: form.topic };
+    default:
+      return {};
+  }
+}
+
+function configToForm(
+  channel: NotificationChannel
+): Partial<ChannelFormData> {
+  const config = JSON.parse(channel.config || "{}");
+  const notifyOn = JSON.parse(channel.notifyOn || "[]");
+  const base = {
+    type: channel.type,
+    name: channel.name,
+    enabled: channel.enabled,
+    notifyOn,
+  };
+
+  switch (channel.type) {
+    case "webhook":
+      return { ...base, url: config.url || "" };
+    case "telegram":
+      return {
+        ...base,
+        botToken: config.botToken || "",
+        chatId: config.chatId || "",
+      };
+    case "email":
+      return {
+        ...base,
+        smtpHost: config.smtpHost || "",
+        smtpPort: String(config.smtpPort || 587),
+        smtpUser: config.smtpUser || "",
+        smtpPass: config.smtpPass || "",
+        to: config.to || "",
+      };
+    case "ntfy":
+      return {
+        ...base,
+        serverUrl: config.serverUrl || "https://ntfy.sh",
+        topic: config.topic || "",
+      };
+    default:
+      return base;
+  }
+}
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Record<string, string>>({});
@@ -18,13 +168,23 @@ export default function SettingsPage() {
     lastResult: { checked: number; changed: number; errors: number } | null;
   } | null>(null);
 
+  // Notification state
+  const [channels, setChannels] = useState<NotificationChannel[]>([]);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState<ChannelFormData>({ ...emptyForm });
+  const [testing, setTesting] = useState<string | null>(null);
+  const [channelSaving, setChannelSaving] = useState(false);
+
   useEffect(() => {
     Promise.all([
       fetch("/api/settings").then((r) => r.json()),
       fetch("/api/scheduler").then((r) => r.json()),
-    ]).then(([s, sch]) => {
+      fetch("/api/notifications").then((r) => r.json()),
+    ]).then(([s, sch, ch]) => {
       setSettings(s);
       setScheduler(sch);
+      setChannels(ch);
       setLoading(false);
     });
   }, []);
@@ -51,8 +211,112 @@ export default function SettingsPage() {
     toast.info("Running scheduler...");
     const res = await fetch("/api/scheduler", { method: "POST" });
     const data = await res.json();
-    setScheduler((prev) => prev ? { ...prev, lastResult: data, lastRun: new Date().toISOString() } : prev);
-    toast.success(`Checked: ${data.checked}, Changed: ${data.changed}, Errors: ${data.errors}`);
+    setScheduler((prev) =>
+      prev
+        ? { ...prev, lastResult: data, lastRun: new Date().toISOString() }
+        : prev
+    );
+    toast.success(
+      `Checked: ${data.checked}, Changed: ${data.changed}, Errors: ${data.errors}`
+    );
+  };
+
+  const fetchChannels = async () => {
+    const res = await fetch("/api/notifications");
+    setChannels(await res.json());
+  };
+
+  const openAddDialog = () => {
+    setEditingId(null);
+    setForm({ ...emptyForm });
+    setDialogOpen(true);
+  };
+
+  const openEditDialog = (channel: NotificationChannel) => {
+    setEditingId(channel.id);
+    setForm({ ...emptyForm, ...configToForm(channel) });
+    setDialogOpen(true);
+  };
+
+  const handleChannelSave = async () => {
+    setChannelSaving(true);
+    try {
+      const payload = {
+        type: form.type,
+        name: form.name,
+        enabled: form.enabled,
+        config: formToConfig(form),
+        notifyOn: form.notifyOn,
+      };
+
+      if (editingId) {
+        await fetch(`/api/notifications/${editingId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        toast.success("Channel updated");
+      } else {
+        await fetch("/api/notifications", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        toast.success("Channel created");
+      }
+      setDialogOpen(false);
+      await fetchChannels();
+    } catch {
+      toast.error("Failed to save channel");
+    } finally {
+      setChannelSaving(false);
+    }
+  };
+
+  const handleChannelDelete = async (id: string) => {
+    if (!confirm("Delete this notification channel?")) return;
+    await fetch(`/api/notifications/${id}`, { method: "DELETE" });
+    toast.success("Channel deleted");
+    await fetchChannels();
+  };
+
+  const handleChannelToggle = async (channel: NotificationChannel) => {
+    await fetch(`/api/notifications/${channel.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled: !channel.enabled }),
+    });
+    await fetchChannels();
+  };
+
+  const handleTest = async (id: string) => {
+    setTesting(id);
+    try {
+      const res = await fetch("/api/notifications/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ channelId: id }),
+      });
+      if (res.ok) {
+        toast.success("Test notification sent!");
+      } else {
+        const data = await res.json();
+        toast.error(`Test failed: ${data.error}`);
+      }
+    } catch {
+      toast.error("Test failed");
+    } finally {
+      setTesting(null);
+    }
+  };
+
+  const toggleNotifyOn = (status: string) => {
+    setForm((f) => ({
+      ...f,
+      notifyOn: f.notifyOn.includes(status)
+        ? f.notifyOn.filter((s) => s !== status)
+        : [...f.notifyOn, status],
+    }));
   };
 
   if (loading) {
@@ -72,27 +336,45 @@ export default function SettingsPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
-            <label className="text-sm text-muted-foreground">Check Interval (minutes)</label>
+            <label className="text-sm text-muted-foreground">
+              Check Interval (minutes)
+            </label>
             <Input
               type="number"
               value={settings.check_interval_minutes || "60"}
-              onChange={(e) => setSettings((s) => ({ ...s, check_interval_minutes: e.target.value }))}
+              onChange={(e) =>
+                setSettings((s) => ({
+                  ...s,
+                  check_interval_minutes: e.target.value,
+                }))
+              }
             />
           </div>
           <div>
-            <label className="text-sm text-muted-foreground">Expiring Threshold (days)</label>
+            <label className="text-sm text-muted-foreground">
+              Expiring Threshold (days)
+            </label>
             <Input
               type="number"
               value={settings.expiring_threshold_days || "30"}
-              onChange={(e) => setSettings((s) => ({ ...s, expiring_threshold_days: e.target.value }))}
+              onChange={(e) =>
+                setSettings((s) => ({
+                  ...s,
+                  expiring_threshold_days: e.target.value,
+                }))
+              }
             />
           </div>
           <div>
-            <label className="text-sm text-muted-foreground">RDAP Timeout (ms)</label>
+            <label className="text-sm text-muted-foreground">
+              RDAP Timeout (ms)
+            </label>
             <Input
               type="number"
               value={settings.rdap_timeout_ms || "10000"}
-              onChange={(e) => setSettings((s) => ({ ...s, rdap_timeout_ms: e.target.value }))}
+              onChange={(e) =>
+                setSettings((s) => ({ ...s, rdap_timeout_ms: e.target.value }))
+              }
             />
           </div>
           <Button onClick={handleSave} disabled={saving}>
@@ -112,7 +394,11 @@ export default function SettingsPage() {
             <div className="space-y-2 text-sm">
               <p>
                 Status:{" "}
-                <span className={scheduler.active ? "text-green-400" : "text-red-400"}>
+                <span
+                  className={
+                    scheduler.active ? "text-green-400" : "text-red-400"
+                  }
+                >
                   {scheduler.active ? "Active" : "Inactive"}
                 </span>
               </p>
@@ -135,6 +421,332 @@ export default function SettingsPage() {
           </Button>
         </CardContent>
       </Card>
+
+      <Separator />
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-sm font-medium">
+            Notification Channels
+          </CardTitle>
+          <Button size="sm" onClick={openAddDialog}>
+            <Plus size={14} className="mr-1" />
+            Add Channel
+          </Button>
+        </CardHeader>
+        <CardContent>
+          {channels.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No notification channels configured. Add one to get alerts when
+              domain statuses change.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {channels.map((channel) => {
+                const Icon = getChannelIcon(channel.type);
+                const notifyOn: string[] = JSON.parse(
+                  channel.notifyOn || "[]"
+                );
+                return (
+                  <div
+                    key={channel.id}
+                    className="flex items-center justify-between p-3 rounded-lg border border-border"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Icon size={18} className="text-muted-foreground" />
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium">
+                            {channel.name}
+                          </span>
+                          <Badge
+                            variant={
+                              channel.enabled ? "default" : "secondary"
+                            }
+                          >
+                            {channel.enabled ? "On" : "Off"}
+                          </Badge>
+                        </div>
+                        <div className="flex gap-1 mt-1">
+                          {notifyOn.map((s) => (
+                            <Badge
+                              key={s}
+                              variant="outline"
+                              className="text-[10px] px-1.5 py-0"
+                            >
+                              {s}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleChannelToggle(channel)}
+                        title={channel.enabled ? "Disable" : "Enable"}
+                      >
+                        {channel.enabled ? "Disable" : "Enable"}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleTest(channel.id)}
+                        disabled={testing === channel.id}
+                        title="Send test"
+                      >
+                        <TestTube size={14} />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => openEditDialog(channel)}
+                        title="Edit"
+                      >
+                        <Pencil size={14} />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleChannelDelete(channel.id)}
+                        title="Delete"
+                      >
+                        <Trash2 size={14} />
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Channel Add/Edit Dialog */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {editingId ? "Edit Channel" : "Add Notification Channel"}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm text-muted-foreground">
+                Channel Type
+              </label>
+              <div className="grid grid-cols-4 gap-2 mt-1">
+                {CHANNEL_TYPES.map((ct) => (
+                  <button
+                    key={ct.value}
+                    onClick={() => setForm((f) => ({ ...f, type: ct.value }))}
+                    className={`flex flex-col items-center gap-1 p-2 rounded-md border text-xs ${
+                      form.type === ct.value
+                        ? "border-primary bg-accent"
+                        : "border-border hover:bg-accent/50"
+                    }`}
+                  >
+                    <ct.icon size={18} />
+                    {ct.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="text-sm text-muted-foreground">Name</label>
+              <Input
+                value={form.name}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, name: e.target.value }))
+                }
+                placeholder="e.g., My Webhook"
+              />
+            </div>
+
+            {/* Dynamic config fields based on type */}
+            {form.type === "webhook" && (
+              <div>
+                <label className="text-sm text-muted-foreground">
+                  Webhook URL
+                </label>
+                <Input
+                  value={form.url}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, url: e.target.value }))
+                  }
+                  placeholder="https://your-webhook-url.com/hook"
+                />
+              </div>
+            )}
+
+            {form.type === "telegram" && (
+              <>
+                <div>
+                  <label className="text-sm text-muted-foreground">
+                    Bot Token
+                  </label>
+                  <Input
+                    value={form.botToken}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, botToken: e.target.value }))
+                    }
+                    placeholder="123456:ABC-DEF..."
+                  />
+                </div>
+                <div>
+                  <label className="text-sm text-muted-foreground">
+                    Chat ID
+                  </label>
+                  <Input
+                    value={form.chatId}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, chatId: e.target.value }))
+                    }
+                    placeholder="-1001234567890"
+                  />
+                </div>
+              </>
+            )}
+
+            {form.type === "email" && (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-sm text-muted-foreground">
+                      SMTP Host
+                    </label>
+                    <Input
+                      value={form.smtpHost}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, smtpHost: e.target.value }))
+                      }
+                      placeholder="smtp.gmail.com"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm text-muted-foreground">
+                      SMTP Port
+                    </label>
+                    <Input
+                      type="number"
+                      value={form.smtpPort}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, smtpPort: e.target.value }))
+                      }
+                      placeholder="587"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-sm text-muted-foreground">
+                    SMTP Username
+                  </label>
+                  <Input
+                    value={form.smtpUser}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, smtpUser: e.target.value }))
+                    }
+                    placeholder="user@example.com"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm text-muted-foreground">
+                    SMTP Password
+                  </label>
+                  <Input
+                    type="password"
+                    value={form.smtpPass}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, smtpPass: e.target.value }))
+                    }
+                  />
+                </div>
+                <div>
+                  <label className="text-sm text-muted-foreground">
+                    Recipient Email
+                  </label>
+                  <Input
+                    value={form.to}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, to: e.target.value }))
+                    }
+                    placeholder="alerts@example.com"
+                  />
+                </div>
+              </>
+            )}
+
+            {form.type === "ntfy" && (
+              <>
+                <div>
+                  <label className="text-sm text-muted-foreground">
+                    Server URL
+                  </label>
+                  <Input
+                    value={form.serverUrl}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, serverUrl: e.target.value }))
+                    }
+                    placeholder="https://ntfy.sh"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm text-muted-foreground">
+                    Topic
+                  </label>
+                  <Input
+                    value={form.topic}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, topic: e.target.value }))
+                    }
+                    placeholder="namedrop-alerts"
+                  />
+                </div>
+              </>
+            )}
+
+            <div>
+              <label className="text-sm text-muted-foreground">
+                Notify on status changes
+              </label>
+              <div className="flex flex-wrap gap-2 mt-2">
+                {STATUS_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => toggleNotifyOn(opt.value)}
+                    className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                      form.notifyOn.includes(opt.value)
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "border-border text-muted-foreground hover:bg-accent"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleChannelSave} disabled={channelSaving}>
+              {channelSaving
+                ? "Saving..."
+                : editingId
+                  ? "Update"
+                  : "Add Channel"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
