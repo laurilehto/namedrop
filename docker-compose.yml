@@ -1,0 +1,14 @@
+services:
+  namedrop:
+    build: .
+    container_name: namedrop
+    ports:
+      - "3000:3000"
+    volumes:
+      - namedrop-data:/app/data
+    environment:
+      - DATABASE_URL=file:/app/data/namedrop.db
+    restart: unless-stopped
+
+volumes:
+  namedrop-data:
