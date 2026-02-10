@@ -1,6 +1,8 @@
 services:
   namedrop:
-    build: .
+    image: ghcr.io/laurilehto/namedrop:latest
+    # To build locally instead: comment out 'image' and uncomment 'build'
+    # build: .
     container_name: namedrop
     ports:
       - "3000:3000"
@@ -8,6 +10,8 @@ services:
       - namedrop-data:/app/data
     environment:
       - DATABASE_URL=file:/app/data/namedrop.db
+      - AUTH_SECRET=${AUTH_SECRET:-changeme}
+      # - AUTH_PASSWORD=your-password-here
     restart: unless-stopped
 
 volumes:
