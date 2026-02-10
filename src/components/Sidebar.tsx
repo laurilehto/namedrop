@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LayoutDashboard, Globe, History, Settings, ChevronLeft, ChevronRight, Sun, Moon, Search } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
 
@@ -17,7 +17,10 @@ const navItems = [
 export function Sidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const { theme, setTheme } = useTheme();
+
+  useEffect(() => setMounted(true), []);
 
   return (
     <aside
@@ -86,10 +89,10 @@ export function Sidebar() {
             "flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors w-full",
             "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
           )}
-          title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          title={mounted ? (theme === "dark" ? "Switch to light mode" : "Switch to dark mode") : undefined}
         >
-          {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
-          {!collapsed && <span>{theme === "dark" ? "Light Mode" : "Dark Mode"}</span>}
+          {mounted && theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+          {!collapsed && <span>{mounted && theme === "dark" ? "Light Mode" : "Dark Mode"}</span>}
         </button>
         {!collapsed && (
           <p className="text-xs text-muted-foreground px-3">NameDrop v0.1.0</p>
