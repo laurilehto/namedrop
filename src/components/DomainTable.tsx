@@ -78,10 +78,10 @@ export function DomainTable({ domains, onCheck, onDelete, checking }: DomainTabl
                 )}
               </TableCell>
               <TableCell className="hidden lg:table-cell text-sm">
-                {domain.autoRegister ? (
-                  <span className="flex items-center gap-1 text-green-400" title={domain.registrarAdapter || "No adapter"}>
+                {domain.autoRegister && domain.registrarAdapter ? (
+                  <span className="flex items-center gap-1 text-green-400" title={domain.registrarAdapter}>
                     <Zap size={12} />
-                    {domain.registrarAdapter || "On"}
+                    {domain.registrarAdapter}
                   </span>
                 ) : (
                   <span className="text-muted-foreground">-</span>

@@ -82,28 +82,20 @@ export default function DomainDetailPage({ params }: { params: Promise<{ id: str
     router.push("/domains");
   };
 
-  const handleToggleAutoRegister = async () => {
-    if (!domain) return;
-    const newValue = !domain.autoRegister;
-    const res = await fetch(`/api/domains/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ autoRegister: newValue }),
-    });
-    const updated = await res.json();
-    setDomain((d) => d ? { ...d, ...updated } : d);
-    toast.success(newValue ? "Auto-register enabled" : "Auto-register disabled");
-  };
-
   const handleAdapterChange = async (adapter: string) => {
+    // Setting adapter also enables auto-register; clearing it disables auto-register
+    const body: Record<string, unknown> = {
+      registrarAdapter: adapter || null,
+      autoRegister: !!adapter,
+    };
     const res = await fetch(`/api/domains/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ registrarAdapter: adapter || null }),
+      body: JSON.stringify(body),
     });
     const updated = await res.json();
     setDomain((d) => d ? { ...d, ...updated } : d);
-    toast.success(adapter ? `Adapter set to ${adapter}` : "Adapter cleared");
+    toast.success(adapter ? `Auto-register via ${adapter}` : "Auto-register disabled");
   };
 
   const handleRegisterNow = async () => {
@@ -201,44 +193,24 @@ export default function DomainDetailPage({ params }: { params: Promise<{ id: str
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium">Auto-Register</p>
-              <p className="text-xs text-muted-foreground">
-                Automatically register when domain becomes available
-              </p>
-            </div>
-            <button
-              onClick={handleToggleAutoRegister}
-              className={`relative w-11 h-6 rounded-full transition-colors ${
-                domain.autoRegister ? "bg-primary" : "bg-muted"
-              }`}
+          <div>
+            <p className="text-sm font-medium">Auto-Register</p>
+            <p className="text-xs text-muted-foreground mb-2">
+              Select a registrar to automatically register when domain becomes available
+            </p>
+            <select
+              value={domain.registrarAdapter || ""}
+              onChange={(e) => handleAdapterChange(e.target.value)}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             >
-              <span
-                className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-background transition-transform ${
-                  domain.autoRegister ? "translate-x-5" : ""
-                }`}
-              />
-            </button>
+              <option value="">Off</option>
+              {registrars.map((r) => (
+                <option key={r.adapterName} value={r.adapterName}>
+                  {r.displayName}
+                </option>
+              ))}
+            </select>
           </div>
-
-          {domain.autoRegister && (
-            <div>
-              <label className="text-sm text-muted-foreground">Registrar</label>
-              <select
-                value={domain.registrarAdapter || ""}
-                onChange={(e) => handleAdapterChange(e.target.value)}
-                className="w-full mt-1 rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              >
-                <option value="">Select a registrar...</option>
-                {registrars.map((r) => (
-                  <option key={r.adapterName} value={r.adapterName}>
-                    {r.displayName}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
 
           {domain.currentStatus === "available" && domain.registrarAdapter && (
             <Button

@@ -33,9 +33,30 @@ export async function PATCH(
   const updates: Record<string, unknown> = {};
   if (body.notes !== undefined) updates.notes = body.notes;
   if (body.tags !== undefined) updates.tags = JSON.stringify(body.tags);
-  if (body.autoRegister !== undefined) updates.autoRegister = body.autoRegister;
-  if (body.registrarAdapter !== undefined) updates.registrarAdapter = body.registrarAdapter;
   if (body.priority !== undefined) updates.priority = body.priority;
+
+  // Auto-register requires an adapter — enforce the invariant
+  if (body.registrarAdapter !== undefined) {
+    updates.registrarAdapter = body.registrarAdapter;
+    if (!body.registrarAdapter) {
+      updates.autoRegister = false;
+    }
+  }
+  if (body.autoRegister !== undefined) {
+    if (body.autoRegister && !body.registrarAdapter) {
+      // Check if adapter is already set on the domain
+      const existing = await db.select({ registrarAdapter: domains.registrarAdapter })
+        .from(domains).where(eq(domains.id, id)).get();
+      if (!existing?.registrarAdapter && !updates.registrarAdapter) {
+        return NextResponse.json(
+          { error: "Cannot enable auto-register without a registrar adapter" },
+          { status: 400 }
+        );
+      }
+    }
+    updates.autoRegister = body.autoRegister;
+  }
+
   updates.updatedAt = new Date().toISOString();
 
   const result = await db
