@@ -13,6 +13,12 @@ services:
       - AUTH_SECRET=${AUTH_SECRET:-changeme}
       # - AUTH_PASSWORD=your-password-here
     restart: unless-stopped
+    networks:
+      - coolify
 
 volumes:
   namedrop-data:
+
+networks:
+  coolify:
+    external: true
