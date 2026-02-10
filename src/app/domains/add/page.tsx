@@ -77,24 +77,49 @@ export default function AddDomainPage() {
       const text = ev.target?.result as string;
       if (!text) return;
 
-      // For CSV files, extract first column (domain) skipping header if present
-      const lines = text.split(/\r?\n/).filter((l) => l.trim());
-      if (lines.length === 0) return;
-
       let domains: string[];
-      const isCsv = file.name.endsWith(".csv") || text.includes(",");
 
-      if (isCsv) {
-        domains = lines.map((line) => {
-          const cols = line.split(",");
-          return cols[0].trim().replace(/^["']|["']$/g, "");
-        });
-        // Skip header if first entry doesn't look like a domain
-        if (domains[0] && !/\.\w{2,}$/.test(domains[0])) {
-          domains = domains.slice(1);
+      // Handle JSON files (e.g. NameDrop exports)
+      if (file.name.endsWith(".json") || text.trimStart().startsWith("[")) {
+        try {
+          const parsed = JSON.parse(text);
+          if (Array.isArray(parsed)) {
+            domains = parsed
+              .map((item: unknown) => {
+                if (typeof item === "string") return item.trim();
+                if (item && typeof item === "object" && "domain" in item) {
+                  return String((item as { domain: string }).domain).trim();
+                }
+                return "";
+              })
+              .filter(Boolean);
+          } else {
+            toast.error("JSON file must contain an array");
+            return;
+          }
+        } catch {
+          toast.error("Invalid JSON file");
+          return;
         }
       } else {
-        domains = lines.map((l) => l.trim());
+        // For CSV files, extract first column (domain) skipping header if present
+        const lines = text.split(/\r?\n/).filter((l) => l.trim());
+        if (lines.length === 0) return;
+
+        const isCsv = file.name.endsWith(".csv") || text.includes(",");
+
+        if (isCsv) {
+          domains = lines.map((line) => {
+            const cols = line.split(",");
+            return cols[0].trim().replace(/^["']|["']$/g, "");
+          });
+          // Skip header if first entry doesn't look like a domain
+          if (domains[0] && !/\.\w{2,}$/.test(domains[0])) {
+            domains = domains.slice(1);
+          }
+        } else {
+          domains = lines.map((l) => l.trim());
+        }
       }
 
       const input = domains.filter(Boolean).join("\n");
