@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Upload } from "lucide-react";
 import { toast } from "sonner";
 
 export default function AddDomainPage() {
@@ -13,6 +14,7 @@ export default function AddDomainPage() {
   const [domain, setDomain] = useState("");
   const [bulkInput, setBulkInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSingleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -41,15 +43,15 @@ export default function AddDomainPage() {
     }
   };
 
-  const handleBulkAdd = async () => {
-    if (!bulkInput.trim()) return;
+  const doBulkImport = async (input: string) => {
+    if (!input.trim()) return;
 
     setLoading(true);
     try {
       const res = await fetch("/api/domains/bulk", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ input: bulkInput }),
+        body: JSON.stringify({ input }),
       });
 
       const data = await res.json();
@@ -62,6 +64,47 @@ export default function AddDomainPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleBulkAdd = () => doBulkImport(bulkInput);
+
+  const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string;
+      if (!text) return;
+
+      // For CSV files, extract first column (domain) skipping header if present
+      const lines = text.split(/\r?\n/).filter((l) => l.trim());
+      if (lines.length === 0) return;
+
+      let domains: string[];
+      const isCsv = file.name.endsWith(".csv") || text.includes(",");
+
+      if (isCsv) {
+        domains = lines.map((line) => {
+          const cols = line.split(",");
+          return cols[0].trim().replace(/^["']|["']$/g, "");
+        });
+        // Skip header if first entry doesn't look like a domain
+        if (domains[0] && !/\.\w{2,}$/.test(domains[0])) {
+          domains = domains.slice(1);
+        }
+      } else {
+        domains = lines.map((l) => l.trim());
+      }
+
+      const input = domains.filter(Boolean).join("\n");
+      setBulkInput(input);
+      toast.info(`Loaded ${domains.filter(Boolean).length} domains from file`);
+    };
+    reader.readAsText(file);
+
+    // Reset so the same file can be selected again
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   return (
@@ -104,6 +147,31 @@ export default function AddDomainPage() {
               <CardTitle className="text-sm font-medium">Bulk import</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                className="border-2 border-dashed border-border rounded-lg p-6 text-center cursor-pointer hover:border-muted-foreground/50 transition-colors"
+              >
+                <Upload size={24} className="mx-auto mb-2 text-muted-foreground" />
+                <p className="text-sm font-medium">Click to upload a file</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  .txt, .csv, or .json
+                </p>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".txt,.csv,.json"
+                  onChange={handleFileImport}
+                  className="hidden"
+                />
+              </div>
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-border" />
+                </div>
+                <div className="relative flex justify-center text-xs">
+                  <span className="bg-card px-2 text-muted-foreground">or paste below</span>
+                </div>
+              </div>
               <textarea
                 placeholder={"example.com\nanother-domain.org\nmy-domain.io"}
                 value={bulkInput}
@@ -113,7 +181,7 @@ export default function AddDomainPage() {
               <p className="text-xs text-muted-foreground">
                 One domain per line, or comma-separated
               </p>
-              <Button onClick={handleBulkAdd} disabled={loading}>
+              <Button onClick={handleBulkAdd} disabled={loading || !bulkInput.trim()}>
                 {loading ? "Importing..." : "Import"}
               </Button>
             </CardContent>
