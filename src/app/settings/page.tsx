@@ -425,25 +425,30 @@ export default function SettingsPage() {
         extraConfig: regForm.extraConfig,
       };
 
+      let res: Response;
       if (editingRegId) {
         if (regForm.apiKey) payload.apiKey = regForm.apiKey;
         if (regForm.apiSecret) payload.apiSecret = regForm.apiSecret;
-        await fetch(`/api/registrars/${editingRegId}`, {
+        res = await fetch(`/api/registrars/${editingRegId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
-        toast.success("Registrar updated");
       } else {
         payload.apiKey = regForm.apiKey;
         if (regForm.apiSecret) payload.apiSecret = regForm.apiSecret;
-        await fetch("/api/registrars", {
+        res = await fetch("/api/registrars", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
-        toast.success("Registrar added");
       }
+      if (!res.ok) {
+        const data = await res.json();
+        toast.error(data.error || "Failed to save registrar");
+        return;
+      }
+      toast.success(editingRegId ? "Registrar updated" : "Registrar added");
       setRegDialogOpen(false);
       await fetchRegistrars();
     } catch {

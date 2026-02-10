@@ -32,23 +32,30 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const encryptedKey = encrypt(apiKey);
-  const encryptedSecret = apiSecret ? encrypt(apiSecret) : null;
+  try {
+    const encryptedKey = encrypt(apiKey);
+    const encryptedSecret = apiSecret ? encrypt(apiSecret) : null;
 
-  const result = await db.insert(registrarConfigs).values({
-    adapterName,
-    displayName,
-    apiKey: encryptedKey,
-    apiSecret: encryptedSecret,
-    sandboxMode: sandboxMode ?? true,
-    extraConfig: extraConfig ? JSON.stringify(extraConfig) : "{}",
-    enabled: true,
-  }).returning();
+    const result = await db.insert(registrarConfigs).values({
+      adapterName,
+      displayName,
+      apiKey: encryptedKey,
+      apiSecret: encryptedSecret,
+      sandboxMode: sandboxMode ?? true,
+      extraConfig: extraConfig ? JSON.stringify(extraConfig) : "{}",
+      enabled: true,
+    }).returning();
 
-  const config = result[0];
-  return NextResponse.json({
-    ...config,
-    apiKey: maskKey(config.apiKey),
-    apiSecret: config.apiSecret ? maskKey(config.apiSecret) : null,
-  });
+    const config = result[0];
+    return NextResponse.json({
+      ...config,
+      apiKey: maskKey(config.apiKey),
+      apiSecret: config.apiSecret ? maskKey(config.apiSecret) : null,
+    });
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Failed to create registrar config" },
+      { status: 500 }
+    );
+  }
 }

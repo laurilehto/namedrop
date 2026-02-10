@@ -86,7 +86,12 @@ export class NamecheapAdapter implements RegistrarAdapter {
   private checkApiError(xml: string): void {
     const status = this.extractXmlAttr(xml, "ApiResponse", "Status");
     if (status === "ERROR") {
-      const errMsg = this.extractXmlValue(xml, "Err") || "Unknown API error";
+      // Namecheap errors: <Errors><Error Number="123">message</Error></Errors>
+      const errMsg =
+        this.extractXmlValue(xml, "Error") ||
+        this.extractXmlValue(xml, "Err") ||
+        "Unknown API error";
+      console.error("[NameDrop] Namecheap API error response:", xml.slice(0, 500));
       throw new Error(`Namecheap: ${errMsg}`);
     }
   }

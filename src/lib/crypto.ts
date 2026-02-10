@@ -6,12 +6,20 @@ const IV_LENGTH = 12;
 const AUTH_TAG_LENGTH = 16;
 const SALT = "namedrop-registrar-keys";
 
+let _warnedDefault = false;
+
 function getKey(): Buffer {
-  const secret = process.env.AUTH_SECRET;
+  let secret = process.env.AUTH_SECRET;
   if (!secret || secret === "changeme") {
-    throw new Error(
-      "AUTH_SECRET must be set to a secure value (not 'changeme') for credential encryption"
-    );
+    if (!_warnedDefault) {
+      _warnedDefault = true;
+      console.warn(
+        "[NameDrop] AUTH_SECRET is not set or is 'changeme'. " +
+        "Using a default key for credential encryption. " +
+        "Set AUTH_SECRET to a secure value in production!"
+      );
+    }
+    secret = "namedrop-default-dev-key-not-for-production";
   }
   return scryptSync(secret, SALT, KEY_LENGTH);
 }
