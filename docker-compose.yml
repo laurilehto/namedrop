@@ -12,7 +12,7 @@ services:
     environment:
       - DATABASE_URL=file:/app/data/namedrop.db
       - AUTH_SECRET=${AUTH_SECRET:-changeme}
-      # - AUTH_PASSWORD=your-password-here
+      - AUTH_PASSWORD=${AUTH_PASSWORD}
     restart: unless-stopped
     networks:
       - proxy
