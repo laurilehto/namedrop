@@ -8,27 +8,56 @@ import { Plus, Search, Download } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 import type { Domain } from "@/lib/schema";
+import { TagBadge } from "@/components/TagEditor";
 
 export default function DomainsPage() {
   const [domains, setDomains] = useState<Domain[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [tagFilter, setTagFilter] = useState("");
+  const [allTags, setAllTags] = useState<string[]>([]);
   const [checking, setChecking] = useState<string | null>(null);
 
   const fetchDomains = useCallback(async () => {
     const params = new URLSearchParams();
     if (search) params.set("search", search);
     if (statusFilter) params.set("status", statusFilter);
+    if (tagFilter) params.set("tag", tagFilter);
     const res = await fetch(`/api/domains?${params}`);
     const data = await res.json();
     setDomains(data);
+    // Extract all unique tags from domains
+    const tags = new Set<string>();
+    data.forEach((d: Domain) => {
+      try {
+        const parsed = JSON.parse(d.tags || "[]") as string[];
+        parsed.forEach((t) => tags.add(t));
+      } catch { /* ignore */ }
+    });
+    setAllTags(Array.from(tags).sort());
     setLoading(false);
-  }, [search, statusFilter]);
+  }, [search, statusFilter, tagFilter]);
 
   useEffect(() => {
     fetchDomains();
   }, [fetchDomains]);
+
+  // Fetch all tags once on mount (unfiltered)
+  useEffect(() => {
+    fetch("/api/domains")
+      .then((r) => r.json())
+      .then((data: Domain[]) => {
+        const tags = new Set<string>();
+        data.forEach((d) => {
+          try {
+            const parsed = JSON.parse(d.tags || "[]") as string[];
+            parsed.forEach((t) => tags.add(t));
+          } catch { /* ignore */ }
+        });
+        setAllTags(Array.from(tags).sort());
+      });
+  }, []);
 
   const handleCheck = async (id: string) => {
     setChecking(id);
@@ -123,6 +152,27 @@ export default function DomainsPage() {
           ))}
         </select>
       </div>
+
+      {allTags.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-muted-foreground">Tags:</span>
+          {tagFilter && (
+            <button
+              onClick={() => setTagFilter("")}
+              className="text-xs px-2 py-0.5 rounded-full border border-dashed border-muted-foreground/30 text-muted-foreground hover:border-muted-foreground/60"
+            >
+              Clear
+            </button>
+          )}
+          {allTags.map((tag) => (
+            <TagBadge
+              key={tag}
+              tag={tag}
+              onClick={() => setTagFilter(tagFilter === tag ? "" : tag)}
+            />
+          ))}
+        </div>
+      )}
 
       {loading ? (
         <p className="text-muted-foreground">Loading...</p>

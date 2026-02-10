@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { domains } from "@/lib/schema";
-import { eq, desc, asc, like } from "drizzle-orm";
+import { eq, desc, asc, like, or } from "drizzle-orm";
 import { isValidDomain, normalizeDomain, extractTLD } from "@/lib/utils/domain-parser";
 import { performCheck } from "@/lib/check-domain";
 
@@ -20,7 +20,14 @@ export async function GET(request: NextRequest) {
   }
 
   if (search) {
-    query = query.where(like(domains.domain, `%${search}%`));
+    const pattern = `%${search}%`;
+    query = query.where(
+      or(
+        like(domains.domain, pattern),
+        like(domains.notes, pattern),
+        like(domains.tags, pattern)
+      )
+    );
   }
 
   const sortCol =

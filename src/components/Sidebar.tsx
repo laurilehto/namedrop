@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Globe, History, Settings, ChevronLeft, ChevronRight } from "lucide-react";
+import { LayoutDashboard, Globe, History, Settings, ChevronLeft, ChevronRight, Sun, Moon, Search } from "lucide-react";
 import { useState } from "react";
+import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -16,6 +17,7 @@ const navItems = [
 export function Sidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+  const { theme, setTheme } = useTheme();
 
   return (
     <aside
@@ -39,6 +41,23 @@ export function Sidebar() {
       </div>
 
       <nav className="flex-1 p-2 space-y-1">
+        <button
+          onClick={() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true }))}
+          className={cn(
+            "flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors w-full",
+            "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+          )}
+        >
+          <Search size={18} />
+          {!collapsed && (
+            <span className="flex-1 flex items-center justify-between">
+              Search
+              <kbd className="text-[10px] px-1.5 py-0.5 rounded bg-muted font-mono">
+                {"\u2318"}K
+              </kbd>
+            </span>
+          )}
+        </button>
         {navItems.map((item) => {
           const isActive =
             item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
@@ -60,11 +79,22 @@ export function Sidebar() {
         })}
       </nav>
 
-      {!collapsed && (
-        <div className="p-4 border-t border-border">
-          <p className="text-xs text-muted-foreground">NameDrop v0.1.0</p>
-        </div>
-      )}
+      <div className="p-2 border-t border-border space-y-2">
+        <button
+          onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+          className={cn(
+            "flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors w-full",
+            "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+          )}
+          title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+        >
+          {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+          {!collapsed && <span>{theme === "dark" ? "Light Mode" : "Dark Mode"}</span>}
+        </button>
+        {!collapsed && (
+          <p className="text-xs text-muted-foreground px-3">NameDrop v0.1.0</p>
+        )}
+      </div>
     </aside>
   );
 }

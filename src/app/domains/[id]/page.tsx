@@ -7,10 +7,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { StatusBadge } from "@/components/StatusBadge";
 import { TimelineEntry } from "@/components/TimelineEntry";
-import { ArrowLeft, RefreshCw, Trash2, Zap } from "lucide-react";
+import { ArrowLeft, RefreshCw, Trash2, Zap, Tag, DollarSign } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 import type { Domain, DomainHistoryEntry } from "@/lib/schema";
+import { TagEditor } from "@/components/TagEditor";
+import { estimateValue, type ValuationResult } from "@/lib/utils/valuation";
 
 interface DomainDetail extends Domain {
   history: DomainHistoryEntry[];
@@ -29,8 +31,10 @@ export default function DomainDetailPage({ params }: { params: Promise<{ id: str
   const [loading, setLoading] = useState(true);
   const [checking, setChecking] = useState(false);
   const [notes, setNotes] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
   const [registrars, setRegistrars] = useState<RegistrarOption[]>([]);
   const [registering, setRegistering] = useState(false);
+  const [valuation, setValuation] = useState<ValuationResult | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -39,6 +43,12 @@ export default function DomainDetailPage({ params }: { params: Promise<{ id: str
     ]).then(([data, regData]) => {
       setDomain(data);
       setNotes(data.notes || "");
+      try {
+        setTags(JSON.parse(data.tags || "[]"));
+      } catch {
+        setTags([]);
+      }
+      setValuation(estimateValue(data.domain));
       const configs = (regData.configs || [])
         .filter((c: { enabled: boolean }) => c.enabled)
         .map((c: { adapterName: string; displayName: string; enabled: boolean }) => ({
@@ -73,6 +83,15 @@ export default function DomainDetailPage({ params }: { params: Promise<{ id: str
       body: JSON.stringify({ notes }),
     });
     toast.success("Notes saved");
+  };
+
+  const handleTagsChange = async (newTags: string[]) => {
+    setTags(newTags);
+    await fetch(`/api/domains/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tags: newTags }),
+    });
   };
 
   const handleDelete = async () => {
@@ -184,6 +203,71 @@ export default function DomainDetailPage({ params }: { params: Promise<{ id: str
         </Card>
       </div>
 
+      {/* Domain Valuation */}
+      {valuation && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <DollarSign size={16} />
+              Estimated Value
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center gap-4">
+              <div>
+                <p className="text-2xl font-bold font-mono">
+                  ${valuation.estimatedRange.min.toLocaleString()} &ndash; ${valuation.estimatedRange.max.toLocaleString()}
+                </p>
+                <p className="text-xs text-muted-foreground">Heuristic estimate only</p>
+              </div>
+              <div className="ml-auto text-right">
+                <div className={`text-sm font-medium px-2.5 py-1 rounded-full ${
+                  valuation.tier === "premium" ? "bg-green-500/20 text-green-400" :
+                  valuation.tier === "high" ? "bg-blue-500/20 text-blue-400" :
+                  valuation.tier === "medium" ? "bg-yellow-500/20 text-yellow-400" :
+                  valuation.tier === "low" ? "bg-orange-500/20 text-orange-400" :
+                  "bg-muted text-muted-foreground"
+                }`}>
+                  {valuation.tier.charAt(0).toUpperCase() + valuation.tier.slice(1)}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Score: {valuation.score}/100
+                </p>
+              </div>
+            </div>
+            <div className="w-full bg-muted rounded-full h-2">
+              <div
+                className={`h-2 rounded-full transition-all ${
+                  valuation.score >= 80 ? "bg-green-500" :
+                  valuation.score >= 65 ? "bg-blue-500" :
+                  valuation.score >= 45 ? "bg-yellow-500" :
+                  valuation.score >= 25 ? "bg-orange-500" :
+                  "bg-red-500"
+                }`}
+                style={{ width: `${valuation.score}%` }}
+              />
+            </div>
+            <div className="space-y-1.5">
+              {valuation.factors.map((f, i) => (
+                <div key={i} className="flex items-start gap-2 text-xs">
+                  <span className={`mt-0.5 shrink-0 ${
+                    f.impact === "positive" ? "text-green-400" :
+                    f.impact === "negative" ? "text-red-400" :
+                    "text-muted-foreground"
+                  }`}>
+                    {f.impact === "positive" ? "+" : f.impact === "negative" ? "-" : "="}
+                  </span>
+                  <div>
+                    <span className="font-medium">{f.name}</span>
+                    <span className="text-muted-foreground ml-1">{f.description}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Auto-Registration Card */}
       <Card>
         <CardHeader>
@@ -222,6 +306,18 @@ export default function DomainDetailPage({ params }: { params: Promise<{ id: str
               {registering ? "Registering..." : "Register Now"}
             </Button>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-medium flex items-center gap-2">
+            <Tag size={16} />
+            Tags
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <TagEditor tags={tags} onChange={handleTagsChange} />
         </CardContent>
       </Card>
 
