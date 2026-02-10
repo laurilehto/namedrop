@@ -1,6 +1,7 @@
 import type { RegistrarAdapter } from "./types";
 import { DynadotAdapter } from "./dynadot/adapter";
 import { NamecheapAdapter } from "./namecheap/adapter";
+import { GandiAdapter } from "./gandi/adapter";
 import { db } from "../db";
 import { registrarConfigs } from "../schema";
 import { eq } from "drizzle-orm";
@@ -9,6 +10,7 @@ import { decrypt } from "../crypto";
 const adapterFactories: Record<string, () => RegistrarAdapter> = {
   dynadot: () => new DynadotAdapter(),
   namecheap: () => new NamecheapAdapter(),
+  gandi: () => new GandiAdapter(),
 };
 
 export function listAdapterTypes(): Array<{
