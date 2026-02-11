@@ -4,11 +4,16 @@ import { useEffect, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DomainTable } from "@/components/DomainTable";
-import { Plus, Search, Download } from "lucide-react";
+import { Search, Download, Upload } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 import type { Domain } from "@/lib/schema";
 import { TagBadge } from "@/components/TagEditor";
+
+interface RegistrarOption {
+  adapterName: string;
+  displayName: string;
+}
 
 export default function DomainsPage() {
   const [domains, setDomains] = useState<Domain[]>([]);
@@ -18,6 +23,9 @@ export default function DomainsPage() {
   const [tagFilter, setTagFilter] = useState("");
   const [allTags, setAllTags] = useState<string[]>([]);
   const [checking, setChecking] = useState<string | null>(null);
+  const [registrars, setRegistrars] = useState<RegistrarOption[]>([]);
+  const [newDomain, setNewDomain] = useState("");
+  const [adding, setAdding] = useState(false);
 
   const fetchDomains = useCallback(async () => {
     const params = new URLSearchParams();
@@ -59,6 +67,21 @@ export default function DomainsPage() {
       });
   }, []);
 
+  // Fetch registrars on mount
+  useEffect(() => {
+    fetch("/api/registrars")
+      .then((r) => r.json())
+      .then((data) => {
+        const configs = (data.configs || [])
+          .filter((c: { enabled: boolean }) => c.enabled)
+          .map((c: { adapterName: string; displayName: string }) => ({
+            adapterName: c.adapterName,
+            displayName: c.displayName,
+          }));
+        setRegistrars(configs);
+      });
+  }, []);
+
   const handleCheck = async (id: string) => {
     setChecking(id);
     try {
@@ -78,6 +101,49 @@ export default function DomainsPage() {
     await fetch(`/api/domains/${id}`, { method: "DELETE" });
     toast.success("Domain deleted");
     await fetchDomains();
+  };
+
+  const handleAutoRegChange = async (id: string, adapter: string) => {
+    const body: Record<string, unknown> = {
+      registrarAdapter: adapter || null,
+      autoRegister: !!adapter,
+    };
+    const res = await fetch(`/api/domains/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (res.ok) {
+      toast.success(adapter ? `Auto-register via ${adapter}` : "Auto-register disabled");
+      await fetchDomains();
+    } else {
+      toast.error("Failed to update auto-register");
+    }
+  };
+
+  const handleAddDomain = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newDomain.trim()) return;
+    setAdding(true);
+    try {
+      const res = await fetch("/api/domains", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ domain: newDomain.trim() }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        toast.error(data.error || "Failed to add domain");
+        return;
+      }
+      toast.success(`Added ${newDomain.trim()}`);
+      setNewDomain("");
+      await fetchDomains();
+    } catch {
+      toast.error("Failed to add domain");
+    } finally {
+      setAdding(false);
+    }
   };
 
   const statuses = ["", "unknown", "registered", "expiring_soon", "grace_period", "redemption", "pending_delete", "available", "error"];
@@ -122,13 +188,25 @@ export default function DomainsPage() {
             </div>
           </div>
           <Link href="/domains/add">
-            <Button>
-              <Plus size={16} className="mr-2" />
-              Add Domain
+            <Button variant="outline">
+              <Upload size={16} className="mr-2" />
+              Import
             </Button>
           </Link>
         </div>
       </div>
+
+      <form onSubmit={handleAddDomain} className="flex gap-3 max-w-lg">
+        <Input
+          placeholder="Add domain to watchlist..."
+          value={newDomain}
+          onChange={(e) => setNewDomain(e.target.value)}
+          className="font-mono"
+        />
+        <Button type="submit" disabled={adding}>
+          {adding ? "Adding..." : "Add"}
+        </Button>
+      </form>
 
       <div className="flex items-center gap-3">
         <div className="relative flex-1 max-w-sm">
@@ -182,6 +260,8 @@ export default function DomainsPage() {
           onCheck={handleCheck}
           onDelete={handleDelete}
           checking={checking}
+          registrars={registrars}
+          onAutoRegChange={handleAutoRegChange}
         />
       )}
     </div>

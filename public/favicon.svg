@@ -1,0 +1,96 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <!-- Globe gradient -->
+    <linearGradient id="globeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4DA8DA"/>
+      <stop offset="50%" stop-color="#2E86AB"/>
+      <stop offset="100%" stop-color="#1B5E7B"/>
+    </linearGradient>
+    <!-- Land gradient -->
+    <linearGradient id="landGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#5CBF8A"/>
+      <stop offset="100%" stop-color="#3A9D6B"/>
+    </linearGradient>
+    <!-- Glass gradient -->
+    <radialGradient id="glassGrad" cx="40%" cy="35%" r="55%">
+      <stop offset="0%" stop-color="rgba(255,255,255,0.35)"/>
+      <stop offset="100%" stop-color="rgba(255,255,255,0.05)"/>
+    </radialGradient>
+    <!-- Handle gradient -->
+    <linearGradient id="handleGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#5A6070"/>
+      <stop offset="100%" stop-color="#3D424F"/>
+    </linearGradient>
+    <!-- Shadow -->
+    <filter id="shadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#000" flood-opacity="0.2"/>
+    </filter>
+    <filter id="innerGlow">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="3" result="blur"/>
+      <feFlood flood-color="#fff" flood-opacity="0.15"/>
+      <feComposite in2="blur" operator="in"/>
+      <feComposite in="SourceGraphic"/>
+    </filter>
+    <clipPath id="globeClip">
+      <circle cx="220" cy="240" r="155"/>
+    </clipPath>
+    <clipPath id="lensClip">
+      <circle cx="290" cy="250" r="105"/>
+    </clipPath>
+  </defs>
+
+  <!-- Globe body -->
+  <circle cx="220" cy="240" r="160" fill="url(#globeGrad)" filter="url(#shadow)"/>
+  
+  <!-- Globe details clipped -->
+  <g clip-path="url(#globeClip)">
+    <!-- Simplified continent shapes -->
+    <!-- North America -->
+    <path d="M120,140 Q140,120 170,125 Q185,130 190,150 Q195,170 180,185 Q170,200 150,210 Q130,215 115,200 Q105,185 110,165 Z" fill="url(#landGrad)" opacity="0.85"/>
+    <!-- South America -->
+    <path d="M160,260 Q175,245 185,255 Q195,275 190,300 Q185,330 170,350 Q155,360 150,340 Q145,310 148,285 Z" fill="url(#landGrad)" opacity="0.85"/>
+    <!-- Europe/Africa -->
+    <path d="M230,145 Q250,140 260,155 Q265,175 255,190 Q250,200 240,195 Q230,185 228,165 Z" fill="url(#landGrad)" opacity="0.85"/>
+    <path d="M240,215 Q260,210 270,230 Q275,260 265,290 Q255,310 240,305 Q230,290 235,260 Z" fill="url(#landGrad)" opacity="0.85"/>
+    <!-- Asia -->
+    <path d="M275,140 Q310,130 335,145 Q350,160 340,180 Q325,195 300,190 Q280,185 275,165 Z" fill="url(#landGrad)" opacity="0.85"/>
+    
+    <!-- Grid lines - latitude -->
+    <ellipse cx="220" cy="160" rx="155" ry="30" fill="none" stroke="#fff" stroke-width="1" opacity="0.15"/>
+    <ellipse cx="220" cy="240" rx="155" ry="30" fill="none" stroke="#fff" stroke-width="1" opacity="0.15"/>
+    <ellipse cx="220" cy="320" rx="155" ry="30" fill="none" stroke="#fff" stroke-width="1" opacity="0.15"/>
+    
+    <!-- Grid lines - longitude -->
+    <ellipse cx="220" cy="240" rx="30" ry="155" fill="none" stroke="#fff" stroke-width="1" opacity="0.15"/>
+    <ellipse cx="220" cy="240" rx="80" ry="155" fill="none" stroke="#fff" stroke-width="1" opacity="0.15"/>
+    <ellipse cx="220" cy="240" rx="130" ry="155" fill="none" stroke="#fff" stroke-width="1" opacity="0.15"/>
+  </g>
+
+  <!-- Globe highlight/shine -->
+  <circle cx="185" cy="195" r="80" fill="url(#glassGrad)" opacity="0.5"/>
+  
+  <!-- Globe outline -->
+  <circle cx="220" cy="240" r="158" fill="none" stroke="#1A4E6B" stroke-width="3.5" opacity="0.5"/>
+
+  <!-- Magnifying glass -->
+  <g filter="url(#shadow)">
+    <!-- Lens ring (outer) -->
+    <circle cx="290" cy="250" r="115" fill="none" stroke="#5A6070" stroke-width="18"/>
+    <circle cx="290" cy="250" r="115" fill="none" stroke="#7A8090" stroke-width="12"/>
+    <circle cx="290" cy="250" r="115" fill="none" stroke="#8E95A5" stroke-width="4"/>
+    
+    <!-- Lens glass overlay -->
+    <circle cx="290" cy="250" r="105" fill="rgba(200,225,255,0.12)"/>
+    
+    <!-- Lens shine -->
+    <path d="M220,195 Q250,165 310,175 Q290,185 260,200 Z" fill="white" opacity="0.25"/>
+    
+    <!-- Handle -->
+    <line x1="375" y1="335" x2="460" y2="425" stroke="url(#handleGrad)" stroke-width="32" stroke-linecap="round"/>
+    <line x1="375" y1="335" x2="460" y2="425" stroke="#8E95A5" stroke-width="20" stroke-linecap="round"/>
+    <line x1="375" y1="335" x2="460" y2="425" stroke="#A0A8B5" stroke-width="8" stroke-linecap="round" opacity="0.4"/>
+    
+    <!-- Handle end cap highlight -->
+    <circle cx="460" cy="425" r="14" fill="#6A7080" opacity="0.5"/>
+  </g>
+</svg>

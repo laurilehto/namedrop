@@ -14,14 +14,21 @@ import { Button } from "@/components/ui/button";
 import { Trash2, RefreshCw, ExternalLink, Zap } from "lucide-react";
 import type { Domain } from "@/lib/schema";
 
+interface RegistrarOption {
+  adapterName: string;
+  displayName: string;
+}
+
 interface DomainTableProps {
   domains: Domain[];
   onCheck: (id: string) => void;
   onDelete: (id: string) => void;
   checking: string | null;
+  registrars?: RegistrarOption[];
+  onAutoRegChange?: (id: string, adapter: string) => void;
 }
 
-export function DomainTable({ domains, onCheck, onDelete, checking }: DomainTableProps) {
+export function DomainTable({ domains, onCheck, onDelete, checking, registrars, onAutoRegChange }: DomainTableProps) {
   return (
     <Table>
       <TableHeader>
@@ -78,7 +85,20 @@ export function DomainTable({ domains, onCheck, onDelete, checking }: DomainTabl
                 )}
               </TableCell>
               <TableCell className="hidden lg:table-cell text-sm">
-                {domain.autoRegister && domain.registrarAdapter ? (
+                {registrars && onAutoRegChange ? (
+                  <select
+                    value={domain.registrarAdapter || ""}
+                    onChange={(e) => onAutoRegChange(domain.id, e.target.value)}
+                    className="h-7 rounded border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+                  >
+                    <option value="">Off</option>
+                    {registrars.map((r) => (
+                      <option key={r.adapterName} value={r.adapterName}>
+                        {r.displayName}
+                      </option>
+                    ))}
+                  </select>
+                ) : domain.autoRegister && domain.registrarAdapter ? (
                   <span className="flex items-center gap-1 text-green-400" title={domain.registrarAdapter}>
                     <Zap size={12} />
                     {domain.registrarAdapter}

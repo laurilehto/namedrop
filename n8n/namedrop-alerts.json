@@ -4,157 +4,36 @@
     {
       "parameters": {
         "httpMethod": "POST",
-        "path": "namedrop-alerts",
-        "responseMode": "onReceived",
-        "responseData": "allEntries"
+        "path": "namedrop-alerts"
       },
       "id": "webhook-trigger",
       "name": "NameDrop Webhook",
       "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2,
+      "typeVersion": 1.1,
       "position": [200, 300]
     },
     {
       "parameters": {
-        "rules": {
-          "rules": [
-            {
-              "conditions": {
-                "options": {
-                  "leftValue": "",
-                  "caseSensitive": true,
-                  "typeValidation": "strict"
-                },
-                "combinator": "and",
-                "conditions": [
-                  {
-                    "leftValue": "={{ $json.new_status }}",
-                    "rightValue": "available",
-                    "operator": {
-                      "type": "string",
-                      "operation": "equals"
-                    }
-                  }
-                ]
-              },
-              "renameOutput": "Available"
-            },
-            {
-              "conditions": {
-                "options": {
-                  "leftValue": "",
-                  "caseSensitive": true,
-                  "typeValidation": "strict"
-                },
-                "combinator": "and",
-                "conditions": [
-                  {
-                    "leftValue": "={{ $json.new_status }}",
-                    "rightValue": "pending_delete",
-                    "operator": {
-                      "type": "string",
-                      "operation": "equals"
-                    }
-                  }
-                ]
-              },
-              "renameOutput": "Pending Delete"
-            },
-            {
-              "conditions": {
-                "options": {
-                  "leftValue": "",
-                  "caseSensitive": true,
-                  "typeValidation": "strict"
-                },
-                "combinator": "and",
-                "conditions": [
-                  {
-                    "leftValue": "={{ $json.new_status }}",
-                    "rightValue": "expiring_soon",
-                    "operator": {
-                      "type": "string",
-                      "operation": "equals"
-                    }
-                  }
-                ]
-              },
-              "renameOutput": "Expiring Soon"
-            }
-          ],
-          "fallbackOutput": {
-            "renameOutput": "Other"
-          }
-        },
-        "options": {}
+        "jsCode": "const item = $input.first().json;\n\nconst statusColors = {\n  available: '#22c55e',\n  registered: '#ef4444',\n  expiring_soon: '#eab308',\n  grace_period: '#f97316',\n  redemption: '#f97316',\n  pending_delete: '#3b82f6',\n  unknown: '#9ca3af',\n  error: '#9ca3af'\n};\n\nconst statusLabels = {\n  available: 'Available',\n  registered: 'Registered',\n  expiring_soon: 'Expiring Soon',\n  grace_period: 'Grace Period',\n  redemption: 'Redemption',\n  pending_delete: 'Pending Delete',\n  unknown: 'Unknown',\n  error: 'Error'\n};\n\nconst color = statusColors[item.new_status] || '#9ca3af';\nconst label = statusLabels[item.new_status] || item.new_status;\nconst isUrgent = ['available', 'pending_delete'].includes(item.new_status);\n\nlet detailRows = '';\nif (item.previous_status) {\n  detailRows += `<tr><td style=\"padding:6px 12px;color:#94a3b8;\">Previous</td><td style=\"padding:6px 12px;color:#e2e8f0;\">${item.previous_status}</td></tr>`;\n}\nif (item.expiry_date) {\n  detailRows += `<tr><td style=\"padding:6px 12px;color:#94a3b8;\">Expiry</td><td style=\"padding:6px 12px;color:#e2e8f0;\">${item.expiry_date}</td></tr>`;\n}\nif (item.registrar) {\n  detailRows += `<tr><td style=\"padding:6px 12px;color:#94a3b8;\">Registrar</td><td style=\"padding:6px 12px;color:#e2e8f0;\">${item.registrar}</td></tr>`;\n}\nif (item.tags && item.tags.length > 0) {\n  detailRows += `<tr><td style=\"padding:6px 12px;color:#94a3b8;\">Tags</td><td style=\"padding:6px 12px;color:#e2e8f0;\">${item.tags.join(', ')}</td></tr>`;\n}\nif (item.auto_register) {\n  detailRows += `<tr><td style=\"padding:6px 12px;color:#94a3b8;\">Auto-register</td><td style=\"padding:6px 12px;color:#22c55e;\">Enabled</td></tr>`;\n}\n\nconst html = `\n<div style=\"background:#0f172a;padding:32px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;\">\n  <div style=\"max-width:480px;margin:0 auto;background:#1e293b;border-radius:12px;overflow:hidden;border:1px solid #334155;\">\n    <div style=\"background:${color};padding:16px 24px;\">\n      <h1 style=\"margin:0;color:#fff;font-size:14px;font-weight:600;text-transform:uppercase;letter-spacing:1px;\">NameDrop Alert</h1>\n    </div>\n    <div style=\"padding:24px;\">\n      <p style=\"margin:0 0 4px;color:#94a3b8;font-size:13px;\">Domain</p>\n      <p style=\"margin:0 0 16px;color:#f1f5f9;font-size:22px;font-family:'SF Mono',Monaco,Consolas,monospace;font-weight:700;\">${item.domain}</p>\n      <div style=\"display:inline-block;background:${color}22;border:1px solid ${color};border-radius:6px;padding:4px 12px;margin-bottom:20px;\">\n        <span style=\"color:${color};font-size:13px;font-weight:600;\">${label}</span>\n      </div>\n      ${detailRows ? `<table style=\"width:100%;border-collapse:collapse;margin-top:8px;\">${detailRows}</table>` : ''}\n    </div>\n    <div style=\"padding:16px 24px;border-top:1px solid #334155;\">\n      <p style=\"margin:0;color:#64748b;font-size:11px;\">Checked at ${item.checked_at} &middot; NameDrop</p>\n    </div>\n  </div>\n</div>`;\n\nconst subjectPrefix = isUrgent ? '[URGENT] ' : '';\nconst subject = `${subjectPrefix}NameDrop: ${item.domain} — ${label}`;\n\nreturn [{ json: { ...item, emailHtml: html, emailSubject: subject } }];"
       },
-      "id": "switch-status",
-      "name": "Route by Status",
-      "type": "n8n-nodes-base.switch",
-      "typeVersion": 3,
+      "id": "format-email",
+      "name": "Format Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
       "position": [450, 300]
     },
     {
       "parameters": {
-        "operation": "sendMessage",
-        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
-        "text": "={{ $json.message }}\n\nDomain: {{ $json.domain }}\nStatus: {{ $json.previous_status }} → {{ $json.new_status }}\n{{ $json.expiry_date ? 'Expiry: ' + $json.expiry_date : '' }}\n{{ $json.registrar ? 'Registrar: ' + $json.registrar : '' }}\n{{ $json.tags.length > 0 ? 'Tags: ' + $json.tags.join(', ') : '' }}",
-        "additionalFields": {
-          "parse_mode": "Markdown"
-        }
-      },
-      "id": "telegram-available",
-      "name": "Telegram (Available)",
-      "type": "n8n-nodes-base.telegram",
-      "typeVersion": 1.2,
-      "position": [700, 150],
-      "credentials": {
-        "telegramApi": {
-          "id": "CONFIGURE_ME",
-          "name": "Telegram Bot"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "operation": "sendMessage",
-        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
-        "text": "={{ $json.message }}\n\nDomain: {{ $json.domain }}\nExpiry: {{ $json.expiry_date }}\nRegistrar: {{ $json.registrar }}",
-        "additionalFields": {
-          "parse_mode": "Markdown"
-        }
-      },
-      "id": "telegram-pending",
-      "name": "Telegram (Pending Delete)",
-      "type": "n8n-nodes-base.telegram",
-      "typeVersion": 1.2,
-      "position": [700, 300],
-      "credentials": {
-        "telegramApi": {
-          "id": "CONFIGURE_ME",
-          "name": "Telegram Bot"
-        }
-      }
-    },
-    {
-      "parameters": {
         "fromEmail": "namedrop@example.com",
-        "toEmail": "={{ $env.ALERT_EMAIL }}",
-        "subject": "NameDrop: {{ $json.message }}",
-        "emailType": "text",
-        "message": "Domain Status Change\n\n{{ $json.message }}\n\nDomain: {{ $json.domain }}\nPrevious Status: {{ $json.previous_status }}\nNew Status: {{ $json.new_status }}\nExpiry Date: {{ $json.expiry_date }}\nRegistrar: {{ $json.registrar }}\nTags: {{ $json.tags.join(', ') }}\nChecked At: {{ $json.checked_at }}\n\n---\nSent by NameDrop"
+        "toEmail": "you@example.com",
+        "subject": "={{ $json.emailSubject }}",
+        "html": "={{ $json.emailHtml }}"
       },
-      "id": "email-expiring",
-      "name": "Email (Expiring Soon)",
+      "id": "send-email",
+      "name": "Send Email",
       "type": "n8n-nodes-base.emailSend",
-      "typeVersion": 2.1,
-      "position": [700, 450],
-      "credentials": {
-        "smtp": {
-          "id": "CONFIGURE_ME",
-          "name": "SMTP Account"
-        }
-      }
+      "typeVersion": 2,
+      "position": [700, 300]
     }
   ],
   "connections": {
@@ -162,51 +41,26 @@
       "main": [
         [
           {
-            "node": "Route by Status",
+            "node": "Format Email",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Route by Status": {
+    "Format Email": {
       "main": [
         [
           {
-            "node": "Telegram (Available)",
+            "node": "Send Email",
             "type": "main",
             "index": 0
           }
-        ],
-        [
-          {
-            "node": "Telegram (Pending Delete)",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Email (Expiring Soon)",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        []
+        ]
       ]
     }
   },
   "settings": {
     "executionOrder": "v1"
-  },
-  "meta": {
-    "instanceId": "namedrop-template"
-  },
-  "tags": [
-    {
-      "name": "NameDrop",
-      "createdAt": "2026-02-09T00:00:00.000Z",
-      "updatedAt": "2026-02-09T00:00:00.000Z"
-    }
-  ]
+  }
 }
