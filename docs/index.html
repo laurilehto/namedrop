@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NameDrop — Self-hosted Domain Drop Catching</title>
+  <meta name="description" content="Monitor expiring domains, track lifecycle states via RDAP, and auto-register when they drop. Self-hosted, open source, single Docker command.">
+  <meta property="og:title" content="NameDrop — Self-hosted Domain Drop Catching">
+  <meta property="og:description" content="Monitor expiring domains, track lifecycle states via RDAP, and auto-register when they drop.">
+  <meta property="og:type" content="website">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Ccircle cx='220' cy='240' r='160' fill='%232E86AB'/%3E%3Ccircle cx='290' cy='250' r='115' fill='none' stroke='%237A8090' stroke-width='12'/%3E%3Cline x1='375' y1='335' x2='460' y2='425' stroke='%237A8090' stroke-width='20' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0b0f1a;
+      --bg-card: #111827;
+      --bg-card-hover: #1a2236;
+      --bg-code: #0d1117;
+      --border: rgba(255, 255, 255, 0.08);
+      --border-hover: rgba(255, 255, 255, 0.15);
+      --text: #e2e8f0;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+      --accent: #3b82f6;
+      --accent-hover: #60a5fa;
+      --green: #22c55e;
+      --green-bg: rgba(34, 197, 94, 0.12);
+      --red: #ef4444;
+      --red-bg: rgba(239, 68, 68, 0.12);
+      --yellow: #eab308;
+      --yellow-bg: rgba(234, 179, 8, 0.12);
+      --orange: #f97316;
+      --orange-bg: rgba(249, 115, 22, 0.12);
+      --blue: #3b82f6;
+      --blue-bg: rgba(59, 130, 246, 0.12);
+      --gray: #6b7280;
+      --gray-bg: rgba(107, 114, 128, 0.12);
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    .container {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* Hero */
+    .hero {
+      text-align: center;
+      padding: 80px 24px 64px;
+      position: relative;
+    }
+
+    .hero::before {
+      content: '';
+      position: absolute;
+      top: -200px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 800px;
+      height: 600px;
+      background: radial-gradient(ellipse, rgba(59, 130, 246, 0.08) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .hero-logo {
+      width: 88px;
+      height: 88px;
+      margin: 0 auto 24px;
+      filter: drop-shadow(0 0 24px rgba(59, 130, 246, 0.3));
+    }
+
+    .hero h1 {
+      font-size: 3.5rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      margin-bottom: 12px;
+      background: linear-gradient(135deg, #e2e8f0, #94a3b8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero .tagline {
+      font-size: 1.25rem;
+      color: var(--text-muted);
+      max-width: 520px;
+      margin: 0 auto 36px;
+      font-weight: 400;
+    }
+
+    .hero-buttons {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 24px;
+      border-radius: 10px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      text-decoration: none;
+      transition: all 0.2s;
+      border: 1px solid transparent;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+    .btn-primary:hover {
+      background: var(--accent-hover);
+      border-color: var(--accent-hover);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 20px rgba(59, 130, 246, 0.3);
+    }
+
+    .btn-outline {
+      background: transparent;
+      color: var(--text);
+      border-color: var(--border-hover);
+    }
+    .btn-outline:hover {
+      background: var(--bg-card);
+      border-color: var(--text-dim);
+      transform: translateY(-1px);
+    }
+
+    .btn svg {
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+    }
+
+    /* Section */
+    section {
+      padding: 64px 0;
+    }
+
+    .section-title {
+      font-size: 1.75rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 8px;
+    }
+
+    .section-subtitle {
+      color: var(--text-muted);
+      margin-bottom: 40px;
+      font-size: 1.05rem;
+    }
+
+    /* Features grid */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 16px;
+    }
+
+    .feature-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      transition: all 0.2s;
+    }
+
+    .feature-card:hover {
+      background: var(--bg-card-hover);
+      border-color: var(--border-hover);
+      transform: translateY(-2px);
+    }
+
+    .feature-icon {
+      font-size: 1.5rem;
+      margin-bottom: 12px;
+      display: block;
+    }
+
+    .feature-card h3 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+
+    .feature-card p {
+      color: var(--text-muted);
+      font-size: 0.875rem;
+      line-height: 1.5;
+    }
+
+    /* Lifecycle */
+    .lifecycle {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 40px;
+      overflow-x: auto;
+    }
+
+    .lifecycle-flow {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      min-width: 900px;
+      justify-content: center;
+      padding: 8px 0;
+    }
+
+    .lifecycle-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    .state-dot {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.2rem;
+      font-weight: 700;
+      border: 2px solid;
+      transition: transform 0.2s;
+    }
+
+    .state-dot:hover { transform: scale(1.1); }
+
+    .state-label {
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      white-space: nowrap;
+    }
+
+    .state-freq {
+      font-size: 0.65rem;
+      color: var(--text-dim);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .state-gray .state-dot { background: var(--gray-bg); border-color: var(--gray); color: var(--gray); }
+    .state-gray .state-label { color: var(--gray); }
+
+    .state-red .state-dot { background: var(--red-bg); border-color: var(--red); color: var(--red); }
+    .state-red .state-label { color: var(--red); }
+
+    .state-yellow .state-dot { background: var(--yellow-bg); border-color: var(--yellow); color: var(--yellow); }
+    .state-yellow .state-label { color: var(--yellow); }
+
+    .state-orange .state-dot { background: var(--orange-bg); border-color: var(--orange); color: var(--orange); }
+    .state-orange .state-label { color: var(--orange); }
+
+    .state-blue .state-dot { background: var(--blue-bg); border-color: var(--blue); color: var(--blue); }
+    .state-blue .state-label { color: var(--blue); }
+
+    .state-green .state-dot { background: var(--green-bg); border-color: var(--green); color: var(--green); }
+    .state-green .state-label { color: var(--green); }
+
+    .lifecycle-arrow {
+      width: 32px;
+      height: 2px;
+      background: var(--text-dim);
+      position: relative;
+      flex-shrink: 0;
+    }
+
+    .lifecycle-arrow::after {
+      content: '';
+      position: absolute;
+      right: 0;
+      top: -4px;
+      border: 5px solid transparent;
+      border-left: 6px solid var(--text-dim);
+    }
+
+    /* Tech stack */
+    .tech-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .tech-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--text);
+      transition: all 0.2s;
+    }
+
+    .tech-pill:hover {
+      border-color: var(--border-hover);
+      background: var(--bg-card-hover);
+    }
+
+    .tech-pill .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    /* Quick start */
+    .quickstart {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+
+    .quickstart-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(255,255,255,0.02);
+    }
+
+    .quickstart-header span {
+      font-size: 0.8rem;
+      color: var(--text-dim);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .copy-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      padding: 4px 12px;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.2s;
+    }
+
+    .copy-btn:hover {
+      background: var(--bg-card-hover);
+      color: var(--text);
+    }
+
+    .quickstart pre {
+      padding: 20px;
+      overflow-x: auto;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85rem;
+      line-height: 1.7;
+      color: var(--text-muted);
+    }
+
+    .quickstart pre .comment { color: var(--text-dim); }
+    .quickstart pre .cmd { color: var(--green); }
+    .quickstart pre .flag { color: var(--yellow); }
+    .quickstart pre .url { color: var(--accent); }
+
+    /* Footer */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 40px 0;
+      text-align: center;
+      color: var(--text-dim);
+      font-size: 0.875rem;
+    }
+
+    footer a {
+      color: var(--text-muted);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+
+    footer a:hover { color: var(--text); }
+
+    .footer-links {
+      display: flex;
+      gap: 24px;
+      justify-content: center;
+      margin-bottom: 16px;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .hero { padding: 48px 24px 40px; }
+      .hero h1 { font-size: 2.25rem; }
+      .hero .tagline { font-size: 1.05rem; }
+      .features-grid { grid-template-columns: 1fr; }
+      .lifecycle { padding: 24px 16px; }
+      section { padding: 40px 0; }
+    }
+
+    @media (max-width: 480px) {
+      .hero h1 { font-size: 1.75rem; }
+      .hero-buttons { flex-direction: column; align-items: center; }
+      .btn { width: 100%; max-width: 280px; justify-content: center; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Hero -->
+  <header class="hero">
+    <div class="hero-logo">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="88" height="88">
+        <defs>
+          <linearGradient id="globeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#4DA8DA"/>
+            <stop offset="50%" stop-color="#2E86AB"/>
+            <stop offset="100%" stop-color="#1B5E7B"/>
+          </linearGradient>
+          <linearGradient id="landGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#5CBF8A"/>
+            <stop offset="100%" stop-color="#3A9D6B"/>
+          </linearGradient>
+          <linearGradient id="handleGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#5A6070"/>
+            <stop offset="100%" stop-color="#3D424F"/>
+          </linearGradient>
+          <filter id="shadow" x="-10%" y="-10%" width="130%" height="130%">
+            <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#000" flood-opacity="0.2"/>
+          </filter>
+          <clipPath id="globeClip">
+            <circle cx="220" cy="240" r="155"/>
+          </clipPath>
+        </defs>
+        <circle cx="220" cy="240" r="160" fill="url(#globeGrad)" filter="url(#shadow)"/>
+        <g clip-path="url(#globeClip)">
+          <path d="M120,140 Q140,120 170,125 Q185,130 190,150 Q195,170 180,185 Q170,200 150,210 Q130,215 115,200 Q105,185 110,165 Z" fill="url(#landGrad)" opacity="0.85"/>
+          <path d="M160,260 Q175,245 185,255 Q195,275 190,300 Q185,330 170,350 Q155,360 150,340 Q145,310 148,285 Z" fill="url(#landGrad)" opacity="0.85"/>
+          <path d="M230,145 Q250,140 260,155 Q265,175 255,190 Q250,200 240,195 Q230,185 228,165 Z" fill="url(#landGrad)" opacity="0.85"/>
+          <path d="M240,215 Q260,210 270,230 Q275,260 265,290 Q255,310 240,305 Q230,290 235,260 Z" fill="url(#landGrad)" opacity="0.85"/>
+          <path d="M275,140 Q310,130 335,145 Q350,160 340,180 Q325,195 300,190 Q280,185 275,165 Z" fill="url(#landGrad)" opacity="0.85"/>
+          <ellipse cx="220" cy="160" rx="155" ry="30" fill="none" stroke="#fff" stroke-width="1" opacity="0.15"/>
+          <ellipse cx="220" cy="240" rx="155" ry="30" fill="none" stroke="#fff" stroke-width="1" opacity="0.15"/>
+          <ellipse cx="220" cy="320" rx="155" ry="30" fill="none" stroke="#fff" stroke-width="1" opacity="0.15"/>
+          <ellipse cx="220" cy="240" rx="30" ry="155" fill="none" stroke="#fff" stroke-width="1" opacity="0.15"/>
+          <ellipse cx="220" cy="240" rx="80" ry="155" fill="none" stroke="#fff" stroke-width="1" opacity="0.15"/>
+          <ellipse cx="220" cy="240" rx="130" ry="155" fill="none" stroke="#fff" stroke-width="1" opacity="0.15"/>
+        </g>
+        <circle cx="185" cy="195" r="80" fill="rgba(255,255,255,0.1)" opacity="0.5"/>
+        <circle cx="220" cy="240" r="158" fill="none" stroke="#1A4E6B" stroke-width="3.5" opacity="0.5"/>
+        <g filter="url(#shadow)">
+          <circle cx="290" cy="250" r="115" fill="none" stroke="#5A6070" stroke-width="18"/>
+          <circle cx="290" cy="250" r="115" fill="none" stroke="#7A8090" stroke-width="12"/>
+          <circle cx="290" cy="250" r="115" fill="none" stroke="#8E95A5" stroke-width="4"/>
+          <circle cx="290" cy="250" r="105" fill="rgba(200,225,255,0.12)"/>
+          <path d="M220,195 Q250,165 310,175 Q290,185 260,200 Z" fill="white" opacity="0.25"/>
+          <line x1="375" y1="335" x2="460" y2="425" stroke="url(#handleGrad)" stroke-width="32" stroke-linecap="round"/>
+          <line x1="375" y1="335" x2="460" y2="425" stroke="#8E95A5" stroke-width="20" stroke-linecap="round"/>
+          <line x1="375" y1="335" x2="460" y2="425" stroke="#A0A8B5" stroke-width="8" stroke-linecap="round" opacity="0.4"/>
+          <circle cx="460" cy="425" r="14" fill="#6A7080" opacity="0.5"/>
+        </g>
+      </svg>
+    </div>
+
+    <h1>NameDrop</h1>
+    <p class="tagline">Self-hosted domain drop catching. Monitor expiring domains, track lifecycle states via RDAP, and auto-register when they become available.</p>
+
+    <div class="hero-buttons">
+      <a href="https://github.com/laurilehto/namedrop" class="btn btn-primary">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+        GitHub
+      </a>
+      <a href="https://github.com/laurilehto/namedrop/pkgs/container/namedrop" class="btn btn-outline">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M13.983 11.078h2.119a.186.186 0 0 0 .186-.185V9.006a.186.186 0 0 0-.186-.186h-2.119a.186.186 0 0 0-.185.185v1.888c0 .102.083.185.185.185m-2.954-5.43h2.118a.186.186 0 0 0 .186-.186V3.574a.186.186 0 0 0-.186-.185h-2.118a.186.186 0 0 0-.185.185v1.888c0 .102.082.185.185.186m0 2.716h2.118a.187.187 0 0 0 .186-.186V6.29a.186.186 0 0 0-.186-.185h-2.118a.186.186 0 0 0-.185.185v1.887c0 .102.082.185.185.186m-2.93 0h2.12a.186.186 0 0 0 .184-.186V6.29a.185.185 0 0 0-.185-.185H8.1a.186.186 0 0 0-.185.185v1.887c0 .102.083.185.185.186m-2.964 0h2.119a.186.186 0 0 0 .185-.186V6.29a.186.186 0 0 0-.185-.185H5.136a.186.186 0 0 0-.186.185v1.887c0 .102.084.185.186.186m5.893 2.715h2.118a.186.186 0 0 0 .186-.185V9.006a.186.186 0 0 0-.186-.186h-2.118a.186.186 0 0 0-.185.185v1.888c0 .102.082.185.185.185m-2.93 0h2.12a.185.185 0 0 0 .184-.185V9.006a.185.185 0 0 0-.184-.186h-2.12a.185.185 0 0 0-.184.185v1.888c0 .102.083.185.185.185m-2.964 0h2.119a.186.186 0 0 0 .185-.185V9.006a.186.186 0 0 0-.185-.186H5.136a.186.186 0 0 0-.186.185v1.888c0 .102.084.185.186.185m-2.92 0h2.12a.185.185 0 0 0 .184-.185V9.006a.185.185 0 0 0-.184-.186h-2.12a.186.186 0 0 0-.186.186v1.887c0 .102.084.185.186.185m10.893 2.715h2.118a.186.186 0 0 0 .186-.185v-1.888a.186.186 0 0 0-.186-.185h-2.118a.186.186 0 0 0-.185.185v1.888c0 .102.082.185.185.185m-2.93 0h2.12a.185.185 0 0 0 .184-.185v-1.888a.185.185 0 0 0-.184-.185h-2.12a.185.185 0 0 0-.184.185v1.888c0 .102.083.185.185.185m-2.964 0h2.119a.185.185 0 0 0 .185-.185v-1.888a.185.185 0 0 0-.185-.185H5.136a.186.186 0 0 0-.186.185v1.888c0 .102.084.185.186.185m-2.92 0h2.12a.186.186 0 0 0 .184-.185v-1.888a.186.186 0 0 0-.184-.185h-2.12a.186.186 0 0 0-.186.185v1.888c0 .102.084.185.186.185M23.763 9.89c-.065-.051-.672-.51-1.954-.51-.338.001-.676.03-1.01.087-.248-1.7-1.653-2.53-1.716-2.566l-.344-.199-.227.328c-.29.418-.5.873-.62 1.353-.174.7-.136 1.36.112 1.978-.572.332-1.492.413-1.678.422H.974a.975.975 0 0 0-.974.974c-.013 1.803.317 3.594.974 5.263a7.273 7.273 0 0 0 3.035 3.498c1.437.783 3.002 1.18 4.59 1.165h.474c1.57-.013 3.106-.387 4.516-1.1a8.637 8.637 0 0 0 2.592-1.98c1.19-1.41 1.99-3.063 2.508-4.844h.217c1.34 0 2.164-.546 2.617-1.002a2.72 2.72 0 0 0 .673-.939l.093-.28-.35-.249z"/></svg>
+        Docker Image
+      </a>
+    </div>
+  </header>
+
+  <!-- Features -->
+  <section>
+    <div class="container">
+      <h2 class="section-title">Features</h2>
+      <p class="section-subtitle">Everything you need to catch expiring domains, no paid APIs required.</p>
+
+      <div class="features-grid">
+        <div class="feature-card">
+          <span class="feature-icon">&#x1F50D;</span>
+          <h3>RDAP Monitoring</h3>
+          <p>Query domain status via the free RDAP protocol. No API keys needed for basic monitoring &mdash; works with all major TLDs.</p>
+        </div>
+
+        <div class="feature-card">
+          <span class="feature-icon">&#x1F504;</span>
+          <h3>Lifecycle Tracking</h3>
+          <p>Track domains through 8 lifecycle states from registered to available. Full status change history with timestamps.</p>
+        </div>
+
+        <div class="feature-card">
+          <span class="feature-icon">&#x23F1;&#xFE0F;</span>
+          <h3>Adaptive Checking</h3>
+          <p>Check frequency increases automatically as domains approach their drop date &mdash; from hourly down to every 5 minutes.</p>
+        </div>
+
+        <div class="feature-card">
+          <span class="feature-icon">&#x26A1;</span>
+          <h3>Auto-Registration</h3>
+          <p>Automatically register domains when they become available. Supports Dynadot, Namecheap, GoDaddy, and Gandi via adapter system.</p>
+        </div>
+
+        <div class="feature-card">
+          <span class="feature-icon">&#x1F514;</span>
+          <h3>Multi-Channel Notifications</h3>
+          <p>Get alerted via Webhook, Telegram, Email (SMTP), or ntfy. Includes n8n workflow template for advanced automations.</p>
+        </div>
+
+        <div class="feature-card">
+          <span class="feature-icon">&#x1F4E6;</span>
+          <h3>Bulk Import &amp; Export</h3>
+          <p>Import domains from CSV, text, or JSON files. Export your watchlist anytime. Global search with Cmd+K.</p>
+        </div>
+
+        <div class="feature-card">
+          <span class="feature-icon">&#x1F3A8;</span>
+          <h3>Dark Dashboard</h3>
+          <p>Clean, data-dense interface with dark and light themes. Status-colored badges, sortable tables, and tag filtering.</p>
+        </div>
+
+        <div class="feature-card">
+          <span class="feature-icon">&#x1F433;</span>
+          <h3>Docker Deploy</h3>
+          <p>Single <code>docker compose up</code> and you're running. SQLite by default &mdash; zero configuration needed.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Domain Lifecycle -->
+  <section>
+    <div class="container">
+      <h2 class="section-title">Domain Lifecycle</h2>
+      <p class="section-subtitle">NameDrop tracks each domain through its full lifecycle, increasing check frequency as the drop date approaches.</p>
+
+      <div class="lifecycle">
+        <div class="lifecycle-flow">
+          <div class="lifecycle-state state-gray">
+            <div class="state-dot">?</div>
+            <span class="state-label">Unknown</span>
+            <span class="state-freq">immediate</span>
+          </div>
+          <div class="lifecycle-arrow"></div>
+          <div class="lifecycle-state state-red">
+            <div class="state-dot">R</div>
+            <span class="state-label">Registered</span>
+            <span class="state-freq">60 min</span>
+          </div>
+          <div class="lifecycle-arrow"></div>
+          <div class="lifecycle-state state-yellow">
+            <div class="state-dot">!</div>
+            <span class="state-label">Expiring</span>
+            <span class="state-freq">30 min</span>
+          </div>
+          <div class="lifecycle-arrow"></div>
+          <div class="lifecycle-state state-orange">
+            <div class="state-dot">G</div>
+            <span class="state-label">Grace</span>
+            <span class="state-freq">15 min</span>
+          </div>
+          <div class="lifecycle-arrow"></div>
+          <div class="lifecycle-state state-orange">
+            <div class="state-dot">$</div>
+            <span class="state-label">Redemption</span>
+            <span class="state-freq">15 min</span>
+          </div>
+          <div class="lifecycle-arrow"></div>
+          <div class="lifecycle-state state-blue">
+            <div class="state-dot">D</div>
+            <span class="state-label">Pending Delete</span>
+            <span class="state-freq">5 min</span>
+          </div>
+          <div class="lifecycle-arrow"></div>
+          <div class="lifecycle-state state-green">
+            <div class="state-dot">&#x2713;</div>
+            <span class="state-label">Available</span>
+            <span class="state-freq">auto-register</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Tech Stack -->
+  <section>
+    <div class="container">
+      <h2 class="section-title">Tech Stack</h2>
+      <p class="section-subtitle">Modern, lightweight, and easy to extend.</p>
+
+      <div class="tech-pills">
+        <span class="tech-pill"><span class="dot" style="background:#fff"></span>Next.js 16</span>
+        <span class="tech-pill"><span class="dot" style="background:#3178c6"></span>TypeScript</span>
+        <span class="tech-pill"><span class="dot" style="background:#06b6d4"></span>Tailwind CSS 4</span>
+        <span class="tech-pill"><span class="dot" style="background:#0f766e"></span>SQLite</span>
+        <span class="tech-pill"><span class="dot" style="background:#c4f042"></span>Drizzle ORM</span>
+        <span class="tech-pill"><span class="dot" style="background:#8b5cf6"></span>shadcn/ui</span>
+        <span class="tech-pill"><span class="dot" style="background:#61dafb"></span>React 19</span>
+        <span class="tech-pill"><span class="dot" style="background:#2496ed"></span>Docker</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Quick Start -->
+  <section>
+    <div class="container">
+      <h2 class="section-title">Quick Start</h2>
+      <p class="section-subtitle">Up and running in under a minute.</p>
+
+      <div class="quickstart">
+        <div class="quickstart-header">
+          <span>docker-compose.yml</span>
+          <button class="copy-btn" onclick="copyCompose()" id="copyBtn">Copy</button>
+        </div>
+        <pre><code><span class="comment"># Clone and start</span>
+<span class="cmd">git clone</span> https://github.com/laurilehto/namedrop.git
+<span class="cmd">cd</span> namedrop
+<span class="cmd">docker compose up</span> <span class="flag">-d</span>
+
+<span class="comment"># Open the dashboard</span>
+<span class="cmd">open</span> <span class="url">http://localhost:3000</span></code></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- Compose snippet -->
+  <section>
+    <div class="container">
+      <div class="quickstart">
+        <div class="quickstart-header">
+          <span>docker-compose.yml</span>
+          <button class="copy-btn" onclick="copyYaml()" id="copyYamlBtn">Copy</button>
+        </div>
+        <pre><code><span class="comment">services:</span>
+  <span class="cmd">namedrop</span>:
+    image: <span class="url">ghcr.io/laurilehto/namedrop:latest</span>
+    container_name: namedrop
+    ports:
+      - <span class="flag">"3000:3000"</span>
+    volumes:
+      - namedrop-data:<span class="flag">/app/data</span>
+    environment:
+      - DATABASE_URL=<span class="flag">file:/app/data/namedrop.db</span>
+      - AUTH_SECRET=<span class="flag">${AUTH_SECRET:-changeme}</span>
+      - AUTH_PASSWORD=<span class="flag">${AUTH_PASSWORD}</span>
+    restart: unless-stopped
+
+<span class="comment">volumes:</span>
+  namedrop-data:</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <div class="container">
+      <div class="footer-links">
+        <a href="https://github.com/laurilehto/namedrop">GitHub</a>
+        <a href="https://github.com/laurilehto/namedrop/issues">Issues</a>
+        <a href="https://github.com/laurilehto/namedrop/pkgs/container/namedrop">Docker</a>
+      </div>
+      <p>MIT License &middot; NameDrop</p>
+    </div>
+  </footer>
+
+  <script>
+    function copyCompose() {
+      const text = `git clone https://github.com/laurilehto/namedrop.git\ncd namedrop\ndocker compose up -d`;
+      navigator.clipboard.writeText(text).then(() => {
+        const btn = document.getElementById('copyBtn');
+        btn.textContent = 'Copied!';
+        setTimeout(() => btn.textContent = 'Copy', 2000);
+      });
+    }
+
+    function copyYaml() {
+      const text = `services:
+  namedrop:
+    image: ghcr.io/laurilehto/namedrop:latest
+    container_name: namedrop
+    ports:
+      - "3000:3000"
+    volumes:
+      - namedrop-data:/app/data
+    environment:
+      - DATABASE_URL=file:/app/data/namedrop.db
+      - AUTH_SECRET=\${AUTH_SECRET:-changeme}
+      - AUTH_PASSWORD=\${AUTH_PASSWORD}
+    restart: unless-stopped
+
+volumes:
+  namedrop-data:`;
+      navigator.clipboard.writeText(text).then(() => {
+        const btn = document.getElementById('copyYamlBtn');
+        btn.textContent = 'Copied!';
+        setTimeout(() => btn.textContent = 'Copy', 2000);
+      });
+    }
+  </script>
+</body>
+</html>
